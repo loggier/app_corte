@@ -38,6 +38,7 @@ import {
   DialogFooter,
   DialogClose,
 } from '@/components/ui/dialog';
+import { Label } from '@/components/ui/label'; // Import Label
 
 import type { Vehicle, Brand, Model } from '@/lib/definitions';
 import { useToast } from '@/hooks/use-toast';
@@ -192,7 +193,7 @@ export default function VehicleForm({ initialData = null, vehicleId }: VehicleFo
       : {
           brand: '',
           model: '',
-          year: '' as any,
+          year: undefined, // Set to undefined to avoid controlled/uncontrolled issue
           tipo: 'Auto',
           corte: '',
           colors: '',
@@ -372,6 +373,7 @@ export default function VehicleForm({ initialData = null, vehicleId }: VehicleFo
            modelId: modelObj?.id, // Store model ID if found, otherwise undefined
            imageUrls,
            tipo: values.tipo || 'Auto',
+           year: values.year || 0, // Ensure year is a number, default to 0 if undefined
        };
 
         // If modelObj wasn't found initially (e.g., just added), try finding it again after potential state update
@@ -554,8 +556,8 @@ export default function VehicleForm({ initialData = null, vehicleId }: VehicleFo
                     type="number"
                     placeholder="Ej., 2023"
                     {...field}
-                    value={field.value ?? ''} // Ensure value is never undefined
-                    onChange={e => field.onChange(e.target.value === '' ? '' : Number(e.target.value))} // Handle empty string for clearing
+                    value={field.value ?? ''} // Ensure value is never undefined or null for input
+                    onChange={e => field.onChange(e.target.value === '' ? undefined : Number(e.target.value))} // Set to undefined on empty
                     disabled={isSubmitting}
                   />
                 </FormControl>
@@ -628,7 +630,7 @@ export default function VehicleForm({ initialData = null, vehicleId }: VehicleFo
             <FormItem>
               <FormLabel>Color(es) de cable</FormLabel>
               <FormControl>
-                <Input placeholder="Ej., Rojo, Azul" {...field} disabled={isSubmitting} />
+                <Input placeholder="Ej., Rojo, Azul" {...field} value={field.value ?? ''} disabled={isSubmitting} />
               </FormControl>
               <FormDescription>Separa con comas para varios colores.</FormDescription>
               <FormMessage />
@@ -639,7 +641,7 @@ export default function VehicleForm({ initialData = null, vehicleId }: VehicleFo
             <FormItem>
               <FormLabel>Ubicación</FormLabel>
               <FormControl>
-                <Input placeholder="Ej. Bajo el tablero.." {...field} disabled={isSubmitting} />
+                <Input placeholder="Ej. Bajo el tablero.." {...field} value={field.value ?? ''} disabled={isSubmitting} />
               </FormControl>
               <FormMessage />
             </FormItem>
