@@ -10,6 +10,7 @@ export interface Model {
   id: string; // El ID del documento generado por Firebase
   name: string;
   brandId: string; // Para relacionar el modelo con su marca
+  createdAt?: any; // Optional: Firebase Timestamp or Date
 }
 export interface Vehicle {
   id: string; // Unique identifier
@@ -38,6 +39,17 @@ export interface User {
   telefono?: string;
   createdAt?: any; // Firebase Timestamp or Date
   updatedAt?: any; // Firebase Timestamp or Date
+}
+
+export interface UserData {
+    id: string;
+    correo: string;
+    nombre: string;
+    empresa?: string;
+    perfil: 'admin' | 'user' | 'tecnico';
+    status?: 'activo' | 'inactivo'; // Make status optional if not always present
+    telefono?: string;
+    // Add other fields from your User interface that might be stored
 }
 
 

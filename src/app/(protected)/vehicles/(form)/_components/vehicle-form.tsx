@@ -8,7 +8,7 @@ import { useState, useEffect, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { collection, addDoc, doc, updateDoc } from 'firebase/firestore';
-import { Save, Loader2, ArrowLeft, X } from 'lucide-react';
+import { Save, Loader2, ArrowLeft, X, PlusCircle } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
 import {
@@ -29,10 +29,19 @@ import {
   SelectContent,
   SelectItem,
 } from '@/components/ui/select';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
+  DialogClose,
+} from '@/components/ui/dialog';
 
 import type { Vehicle, Brand, Model } from '@/lib/definitions';
 import { useToast } from '@/hooks/use-toast';
-import { getAllBrands, getModelsByBrandId } from '@/firebase/data/brandsModels';
+import { getAllBrands, getModelsByBrandId, addModelToBrand } from '@/firebase/data/brandsModels'; // Import addModelToBrand
 import { db } from '@/firebase/config';
 
 // Global backend base URL (use env variable in production)
@@ -52,14 +61,14 @@ const formSchema = z.object({
   brand: z.string().min(1, { message: 'Brand is required.' }),
   model: z
     .string()
-    .min(2, { message: 'Model must be at least 2 characters.' })
+    .min(1, { message: 'Model is required.' }) // Changed min to 1 as it can be newly added
     .max(50),
   year: z
     .coerce.number({ invalid_type_error: 'Year must be a number.' })
     .int()
     .min(1900, { message: 'Year must be after 1900.' })
     .max(new Date().getFullYear() + 1, { message: 'Year cannot be in the future.' }),
-  tipo: z.enum(['Auto', 'Moto']).default('Auto'), // Add tipo field with default
+  tipo: z.enum(['Auto', 'Moto']).default('Auto'),
   corte: z.string().min(1, { message: 'Corte is required.' }),
   colors: z
     .string()
@@ -94,14 +103,18 @@ export default function VehicleForm({ initialData = null, vehicleId }: VehicleFo
   const router = useRouter();
   const { toast } = useToast();
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isAddingModel, setIsAddingModel] = useState(false);
   const [brands, setBrands] = useState<Brand[]>([]);
   const [models, setModels] = useState<Model[]>([]);
-  const [selectedBrand, setSelectedBrand] = useState<string>(initialData?.brandId || ''); // Use brandId for consistency if available
+  const [selectedBrand, setSelectedBrand] = useState<string>(initialData?.brandId || '');
   const [existingImageUrls, setExistingImageUrls] = useState<string[]>(
     initialData?.imageUrls || []
   );
   const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
   const [imagePreviews, setImagePreviews] = useState<string[]>([]);
+  const [isAddModelDialogOpen, setIsAddModelDialogOpen] = useState(false);
+  const [newModelName, setNewModelName] = useState('');
+
 
   // Fetch brands
   useEffect(() => {
@@ -121,52 +134,66 @@ export default function VehicleForm({ initialData = null, vehicleId }: VehicleFo
   useEffect(() => {
     const previews = [...existingImageUrls];
     selectedFiles.forEach((file) => {
-      const reader = new FileReader();
-      reader.onload = () => {
-        if (reader.result) {
-          previews.push(reader.result as string);
-          setImagePreviews([...previews]);
+        // Ensure we don't add duplicates if selection changes
+        const objectUrl = URL.createObjectURL(file);
+        if (!previews.includes(objectUrl)) {
+            previews.push(objectUrl);
         }
-      };
-      reader.readAsDataURL(file);
     });
-    if (!selectedFiles.length) {
-      setImagePreviews(previews);
-    }
-    // Cleanup function to revoke object URLs if needed
+    setImagePreviews(previews);
+
+    // Cleanup function to revoke object URLs
     return () => {
-        imagePreviews.forEach(preview => {
+        previews.forEach(preview => {
             if (preview.startsWith('blob:')) {
                 URL.revokeObjectURL(preview);
             }
         });
     };
-  }, [existingImageUrls, selectedFiles]); // Dependency array needs review if previews cause issues
+  }, [existingImageUrls, selectedFiles]);
+
 
   const handleFileChange = (files: File[]) => {
-    setSelectedFiles(files.slice(0, 5));
+    const currentTotalImages = existingImageUrls.length + selectedFiles.length;
+    const allowedNewFiles = 5 - currentTotalImages;
+    const filesToAdd = files.slice(0, allowedNewFiles);
+
+    // Prevent duplicates based on name and size
+    const uniqueNewFiles = filesToAdd.filter(
+      (newFile) =>
+        !selectedFiles.some(
+          (existingFile) =>
+            existingFile.name === newFile.name && existingFile.size === newFile.size
+        )
+    );
+
+    const combined = [...selectedFiles, ...uniqueNewFiles].slice(0, 5 - existingImageUrls.length);
+    setSelectedFiles(combined);
+     // Also update the form state
+     form.setValue('images', combined, { shouldValidate: true });
   };
+
 
   const form = useForm<VehicleFormValues>({
     resolver: zodResolver(formSchema),
     defaultValues: initialData
       ? {
-          brand: initialData.brandId || brands.find(b => b.name === initialData.brand)?.id || '', // Prefer brandId, fallback to lookup
+          brand: initialData.brandId || brands.find(b => b.name === initialData.brand)?.id || '',
           model: initialData.model,
           year: initialData.year,
-          tipo: initialData.tipo || 'Auto', // Set default 'Auto' if missing
+          tipo: initialData.tipo || 'Auto',
           corte: initialData.corte,
           colors: initialData.colors,
           ubicacion: initialData.ubicacion,
           existingImageUrls: initialData.imageUrls || [],
-          images: undefined, // Files are handled separately
+          images: undefined,
           observation: initialData.observation || '',
         }
       : {
           brand: '',
           model: '',
-          year: '' as any, // Initialize with empty string to avoid uncontrolled error
-          tipo: 'Auto', // Default for new vehicles
+          year: '' as any,
+          tipo: 'Auto',
           corte: '',
           colors: '',
           ubicacion: '',
@@ -179,49 +206,57 @@ export default function VehicleForm({ initialData = null, vehicleId }: VehicleFo
    // Effect to set the selected brand when editing and brands are loaded
    useEffect(() => {
     if (initialData && brands.length > 0) {
-        const initialBrandId = brands.find(b => b.name === initialData.brand)?.id || '';
-        setSelectedBrand(initialBrandId);
-        form.setValue('brand', initialBrandId, { shouldValidate: true }); // Set brand in form
+        const initialBrandId = brands.find(b => b.name === initialData.brand)?.id || initialData.brandId || '';
+        if (initialBrandId) {
+            setSelectedBrand(initialBrandId);
+            form.setValue('brand', initialBrandId, { shouldValidate: true });
+        }
     }
     }, [initialData, brands, form]);
 
 
    // Effect to set the selected model when editing and models are loaded
    useEffect(() => {
-    if (initialData && models.length > 0 && !form.getValues('model')) {
+    if (initialData?.model && models.length > 0) {
         // Check if the initial model name exists in the loaded models
         const modelExists = models.some(m => m.name === initialData.model);
         if (modelExists) {
-            form.setValue('model', initialData.model, { shouldValidate: true });
+            // Only set the value if it's not already set or differs, to avoid infinite loops
+             if (form.getValues('model') !== initialData.model) {
+                 form.setValue('model', initialData.model, { shouldValidate: true, shouldDirty: false });
+             }
+        } else if (!vehicleId) {
+             // If it's a new form and the initial model (if any provided) isn't in the list, reset it.
+             // This case might not be typical for 'edit' but good for consistency.
+             // form.setValue('model', '', { shouldValidate: true });
         }
     }
-  }, [initialData, models, form]);
+  }, [initialData, models, form, vehicleId]);
 
 
   const removeExistingImage = (url: string) => {
     const updated = existingImageUrls.filter((u) => u !== url);
     setExistingImageUrls(updated);
-    setImagePreviews((prev) => prev.filter((p) => p !== url));
+    // No need to manage imagePreviews separately for existing URLs
     form.setValue('existingImageUrls', updated);
   };
 
   const removeSelectedFile = (index: number) => {
-    const fileToRemove = selectedFiles[index];
-    const dataTransfer = new DataTransfer();
     const updatedFiles = selectedFiles.filter((_, i) => i !== index);
-    updatedFiles.forEach(file => dataTransfer.items.add(file));
 
-    // Find the input element and update its files property
+    // Update component state
+    setSelectedFiles(updatedFiles);
+
+    // Update React Hook Form state
+    form.setValue('images', updatedFiles, { shouldValidate: true });
+
+    // Update the file input visually (optional but good UX)
+    const dataTransfer = new DataTransfer();
+    updatedFiles.forEach(file => dataTransfer.items.add(file));
     const fileInput = document.querySelector('input[type="file"]') as HTMLInputElement | null;
     if (fileInput) {
         fileInput.files = dataTransfer.files;
-        // Manually trigger the change event for react-hook-form
-        const event = new Event('change', { bubbles: true });
-        fileInput.dispatchEvent(event);
     }
-
-    setSelectedFiles(updatedFiles);
-    form.setValue('images', updatedFiles); // Update RHF state
 };
 
 
@@ -245,10 +280,52 @@ export default function VehicleForm({ initialData = null, vehicleId }: VehicleFo
   const handleBrandChange = (brandId: string) => {
     setSelectedBrand(brandId);
     form.setValue('brand', brandId);
-    form.setValue('model', ''); // Reset model when brand changes
+    form.setValue('model', '', { shouldValidate: true }); // Reset model when brand changes
     setModels([]); // Clear models immediately
     getModelsByBrandId(brandId).then(setModels); // Fetch new models
   };
+
+    // Function to handle adding a new model
+    const handleAddNewModel = async () => {
+        if (!newModelName.trim()) {
+          toast({ title: 'Error', description: 'El nombre del modelo no puede estar vacío.', variant: 'destructive' });
+          return;
+        }
+        if (!selectedBrand) {
+          toast({ title: 'Error', description: 'Seleccione una marca primero.', variant: 'destructive' });
+          return;
+        }
+
+        // Check if model already exists (case-insensitive)
+        const existingModel = models.find(m => m.name.toLowerCase() === newModelName.trim().toLowerCase());
+        if (existingModel) {
+            toast({ title: 'Información', description: `El modelo "${existingModel.name}" ya existe para esta marca. Seleccionándolo...` });
+            form.setValue('model', existingModel.name, { shouldValidate: true });
+            setIsAddModelDialogOpen(false);
+            setNewModelName('');
+            return;
+        }
+
+
+        setIsAddingModel(true);
+        try {
+          const addedModel = await addModelToBrand(selectedBrand, newModelName.trim());
+          // Refetch models to include the new one
+          const updatedModels = await getModelsByBrandId(selectedBrand);
+          setModels(updatedModels);
+          // Set the new model as selected in the form
+          form.setValue('model', addedModel.name, { shouldValidate: true });
+          toast({ title: 'Éxito', description: `Modelo "${addedModel.name}" agregado correctamente.` });
+          setIsAddModelDialogOpen(false);
+          setNewModelName('');
+        } catch (error: any) {
+          console.error("Error adding new model:", error);
+          toast({ title: 'Error', description: error.message || 'No se pudo agregar el modelo.', variant: 'destructive' });
+        } finally {
+          setIsAddingModel(false);
+        }
+      };
+
 
   const onSubmit = async (values: VehicleFormValues) => {
     setIsSubmitting(true);
@@ -280,19 +357,31 @@ export default function VehicleForm({ initialData = null, vehicleId }: VehicleFo
       const brandObj = brands.find((b) => b.id === values.brand);
       if (!brandObj) throw new Error("Selected brand not found");
 
-      const modelObj = models.find((m) => m.name === values.model);
-      // If it's a new vehicle, modelObj must exist
-      if (!vehicleId && !modelObj) throw new Error("Selected model not found");
+      // Find the model object using the potentially newly added model name
+      let modelObj = models.find((m) => m.name === values.model);
 
 
-      const payload: Partial<Vehicle> & { brandId?: string; modelId?: string } = {
-        ...rest,
-        brand: brandObj.name, // Store brand name
-        brandId: brandObj.id, // Store brand ID
-        modelId: modelObj?.id, // Store model ID if found
-        imageUrls,
-        tipo: values.tipo || 'Auto', // Ensure tipo is included, default to 'Auto' if somehow undefined
-      };
+       // Prepare payload - modelId might be missing if it was just added but state hasn't updated yet
+       // In a robust implementation, addModelToBrand should return the ID, or we refetch models *before* this point.
+       // For now, we assume the model name is sufficient for the backend or we find it if available.
+       const payload: Partial<Vehicle> & { brandId?: string; modelId?: string | undefined } = {
+           ...rest,
+           brand: brandObj.name, // Store brand name
+           brandId: brandObj.id, // Store brand ID
+           model: values.model, // Use the model name from the form
+           modelId: modelObj?.id, // Store model ID if found, otherwise undefined
+           imageUrls,
+           tipo: values.tipo || 'Auto',
+       };
+
+        // If modelObj wasn't found initially (e.g., just added), try finding it again after potential state update
+        if (!payload.modelId) {
+            const potentiallyNewModel = models.find(m => m.name === values.model);
+            if (potentiallyNewModel) {
+                payload.modelId = potentiallyNewModel.id;
+            }
+        }
+
 
       // Remove potentially undefined observation if empty
       if (!payload.observation) {
@@ -321,9 +410,14 @@ export default function VehicleForm({ initialData = null, vehicleId }: VehicleFo
       } else {
         // Add new document
         // Ensure required fields for new doc are present
-        if (!payload.brandId || !payload.modelId || !payload.model) {
-            throw new Error("Missing brand or model information for new vehicle.");
-        }
+         if (!payload.brandId || !payload.model) { // Model ID might be tricky if just added
+             throw new Error("Missing brand or model information for new vehicle.");
+         }
+         // If modelId is missing after checks, log a warning or handle as needed
+         if (!payload.modelId) {
+             console.warn("Model ID is missing. Saving vehicle without explicit model reference ID.");
+             // Consider fetching the model ID again here if critical
+         }
         await addDoc(collection(db, 'vehicles'), payload);
         toast({ title: 'Success', description: 'Vehículo agregado correctamente.' });
         router.push('/vehicles');
@@ -347,33 +441,44 @@ export default function VehicleForm({ initialData = null, vehicleId }: VehicleFo
       render={({ field }) => (
         <FormItem>
           <FormLabel>Modelo</FormLabel>
-          {vehicleId && initialData ? (
-            // Display initial model name but it's not part of the form submission for edit
-             <Input value={initialData.model} disabled />
-          ) : (
-            <FormControl>
-              <Select
-                onValueChange={field.onChange}
-                value={field.value} // Ensure this value is controlled
-                disabled={isSubmitting || models.length === 0}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Seleccione un modelo" />
-                </SelectTrigger>
-                <SelectContent>
-                  {models.length > 0 ? (
-                    models.map((m) => (
-                        <SelectItem key={m.id} value={m.name}>
-                        {m.name}
-                        </SelectItem>
-                    ))
-                    ) : (
-                    <SelectItem value="loading" disabled>Cargando modelos...</SelectItem>
-                 )}
-                </SelectContent>
-              </Select>
-            </FormControl>
-          )}
+           <div className="flex items-center gap-2">
+              <FormControl className="flex-grow">
+                <Select
+                  onValueChange={field.onChange}
+                  value={field.value} // Ensure this value is controlled
+                  disabled={isSubmitting || vehicleId !== undefined} // Disable if editing
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Seleccione un modelo" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {models.length > 0 ? (
+                      models.map((m) => (
+                          <SelectItem key={m.id} value={m.name}>
+                          {m.name}
+                          </SelectItem>
+                      ))
+                      ) : (
+                      <SelectItem value="loading" disabled>
+                          {selectedBrand ? 'Cargando modelos...' : 'Seleccione una marca primero'}
+                       </SelectItem>
+                   )}
+                  </SelectContent>
+                </Select>
+              </FormControl>
+              {!vehicleId && ( // Only show Add button for new vehicles
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="icon"
+                    onClick={() => setIsAddModelDialogOpen(true)}
+                    disabled={isSubmitting || !selectedBrand}
+                    aria-label="Agregar nuevo modelo"
+                  >
+                    <PlusCircle className="h-4 w-4" />
+                  </Button>
+              )}
+           </div>
           <FormMessage />
         </FormItem>
       )}
@@ -540,7 +645,7 @@ export default function VehicleForm({ initialData = null, vehicleId }: VehicleFo
             </FormItem>
           )} />
 
-          <FormField control={form.control} name="images" render={({ field }) => (
+          <FormField control={form.control} name="images" render={({ field: { onChange, value, ...restField } }) => ( // Destructure onChange and value
              <FormItem>
                <FormLabel>Imágenes</FormLabel>
                <FormControl>
@@ -549,33 +654,28 @@ export default function VehicleForm({ initialData = null, vehicleId }: VehicleFo
                    multiple
                    accept="image/*"
                    onChange={(e) => {
-                     const files = e.target.files ? Array.from(e.target.files) : [];
-                     // Filter out files that are already selected or exceed the limit
-                     const newFiles = files.filter(
-                       (file) => !selectedFiles.some((sf) => sf.name === file.name && sf.size === file.size)
-                     );
-                     const combinedFiles = [...selectedFiles, ...newFiles].slice(0, 5 - existingImageUrls.length);
-
-                     handleFileChange(combinedFiles);
-                     field.onChange(combinedFiles); // Update RHF state
+                       const files = e.target.files ? Array.from(e.target.files) : [];
+                       handleFileChange(files); // Use the updated handler
+                       // No need to call field.onChange here, handleFileChange updates RHF
                    }}
                    disabled={isSubmitting || (existingImageUrls.length + selectedFiles.length >= 5)}
+                   {...restField} // Pass down other field properties like ref, name, onBlur
                  />
                </FormControl>
                <FormDescription>
                  Puedes subir hasta {5 - existingImageUrls.length} imágenes nuevas. Máximo 5 en total.
                </FormDescription>
                <FormMessage />
-               {(imagePreviews.length > 0 || selectedFiles.length > 0) && (
+               {(existingImageUrls.length > 0 || selectedFiles.length > 0) && ( // Check both existing and selected
                 <div className="grid grid-cols-2 md:grid-cols-3 gap-4 mt-4">
                     {/* Display existing images */}
                     {existingImageUrls.map((url, idx) => (
-                        <div key={`existing-${idx}`} className="relative group">
+                        <div key={`existing-${url}-${idx}`} className="relative group">
                         <img src={url} alt={`existing-preview-${idx}`} className="w-full h-24 object-cover rounded-md" />
                         <Button
                             size="icon"
                             variant="destructive"
-                            className="absolute top-1 right-1 opacity-0 group-hover:opacity-100 transition-opacity"
+                            className="absolute top-1 right-1 h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity"
                             onClick={() => removeExistingImage(url)}
                             type="button"
                         >
@@ -586,21 +686,26 @@ export default function VehicleForm({ initialData = null, vehicleId }: VehicleFo
                         </div>
                     ))}
                     {/* Display newly selected file previews */}
-                    {selectedFiles.map((file, idx) => (
-                        <div key={`new-${idx}`} className="relative group">
-                         <img src={URL.createObjectURL(file)} alt={`new-preview-${idx}`} className="w-full h-24 object-cover rounded-md" />
-                        <Button
-                            size="icon"
-                            variant="destructive"
-                            className="absolute top-1 right-1 opacity-0 group-hover:opacity-100 transition-opacity"
-                            onClick={() => removeSelectedFile(idx)}
-                            type="button" // Prevent form submission
-                        >
-                            <X className="w-4 h-4" />
-                            <span className="sr-only">Remove new image</span>
-                        </Button>
-                        </div>
-                    ))}
+                    {selectedFiles.map((file, idx) => {
+                        const previewUrl = imagePreviews.find(p => p.startsWith('blob:') && selectedFiles[idx] && p.endsWith(file.name)); // Basic match, might need improvement
+                        const objectUrl = URL.createObjectURL(file); // Create URL for display
+
+                         return (
+                            <div key={`new-${file.name}-${idx}`} className="relative group">
+                            <img src={objectUrl} alt={`new-preview-${idx}`} className="w-full h-24 object-cover rounded-md" onLoad={() => URL.revokeObjectURL(objectUrl)} /> {/* Revoke after load */}
+                            <Button
+                                size="icon"
+                                variant="destructive"
+                                className="absolute top-1 right-1 h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity"
+                                onClick={() => removeSelectedFile(idx)}
+                                type="button" // Prevent form submission
+                            >
+                                <X className="w-4 h-4" />
+                                <span className="sr-only">Remove new image</span>
+                            </Button>
+                            </div>
+                         );
+                    })}
                 </div>
                 )}
              </FormItem>
@@ -610,20 +715,59 @@ export default function VehicleForm({ initialData = null, vehicleId }: VehicleFo
             <FormItem>
               <FormLabel>Observación</FormLabel>
               <FormControl>
-                <Textarea placeholder="Observación adicional..." rows={4} {...field} disabled={isSubmitting} className="resize-none" />
+                <Textarea placeholder="Observación adicional..." rows={4} {...field} value={field.value ?? ''} disabled={isSubmitting} className="resize-none" />
               </FormControl>
               <FormMessage />
             </FormItem>
           )} />
 
           <div className="flex justify-end">
-            <Button type="submit" disabled={isSubmitting} className="bg-accent text-accent-foreground hover:bg-accent/90">
+            <Button type="submit" disabled={isSubmitting || isAddingModel} className="bg-accent text-accent-foreground hover:bg-accent/90">
               {isSubmitting ? <Loader2 className="animate-spin w-4 h-4 mr-2" /> : <Save className="w-4 h-4 mr-2" />}
               {vehicleId ? 'Guardar cambio' : 'Agregar Vehículo'}
             </Button>
           </div>
         </form>
       </Form>
+
+        {/* Add New Model Dialog */}
+        <Dialog open={isAddModelDialogOpen} onOpenChange={setIsAddModelDialogOpen}>
+            <DialogContent>
+            <DialogHeader>
+                <DialogTitle>Agregar Nuevo Modelo</DialogTitle>
+                <DialogDescription>
+                Agregue un nuevo modelo para la marca seleccionada.
+                </DialogDescription>
+            </DialogHeader>
+            <div className="grid gap-4 py-4">
+                <div className="grid grid-cols-4 items-center gap-4">
+                <Label htmlFor="new-model-name" className="text-right">
+                    Nombre
+                </Label>
+                <Input
+                    id="new-model-name"
+                    value={newModelName}
+                    onChange={(e) => setNewModelName(e.target.value)}
+                    className="col-span-3"
+                    placeholder="Ej., Corolla"
+                    disabled={isAddingModel}
+                />
+                </div>
+            </div>
+            <DialogFooter>
+                 <DialogClose asChild>
+                    <Button type="button" variant="outline" disabled={isAddingModel}>
+                    Cancelar
+                    </Button>
+                 </DialogClose>
+                <Button onClick={handleAddNewModel} disabled={isAddingModel || !newModelName.trim()}>
+                {isAddingModel ? <Loader2 className="animate-spin w-4 h-4 mr-2" /> : null}
+                Agregar Modelo
+                </Button>
+            </DialogFooter>
+            </DialogContent>
+        </Dialog>
+
     </div>
   );
 }
