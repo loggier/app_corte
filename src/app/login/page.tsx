@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import Image from 'next/image';
 import { useRouter } from 'next/navigation';
 import { collection, query, where, getDocs } from 'firebase/firestore';
@@ -23,6 +23,38 @@ export default function LoginPage() {
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
+  const [showInstallButton, setShowInstallButton] = useState(false);// Initialize to false
+
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const handleBeforeInstallPrompt = (e: Event) => {
+        // Prevent the mini-infobar from appearing on mobile
+        e.preventDefault();
+        // Stash the event so it can be triggered later.
+        setDeferredPrompt(e);
+        // Update UI to notify the user they can add to home screen
+        setShowInstallButton(true);
+      };
+      window.addEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
+      return () => {
+        window.removeEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
+      };
+    };
+  }, []);
+
+  const handleInstallClick = () => {
+    if (deferredPrompt) {
+      // Hide the install button
+      setShowInstallButton(false);
+      // Show the install prompt
+      deferredPrompt.prompt();
+      // Wait for the user to respond to the prompt
+      deferredPrompt.userChoice.then((choiceResult: any) => {
+        setDeferredPrompt(null);
+      });
+    }
+  };
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -131,6 +163,11 @@ export default function LoginPage() {
               {isLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <LogIn className="mr-2 h-4 w-4" />}
                Ingresar
             </Button>
+            {showInstallButton && (
+              <Button onClick={handleInstallClick} className="w-full bg-accent text-accent-foreground hover:bg-accent/90">
+                Instalar Aplicación
+              </Button>
+            )}
           </form>
         </CardContent>
          {/* <CardFooter className="text-center text-xs text-muted-foreground">

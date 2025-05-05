@@ -1,6 +1,7 @@
 import type {Metadata} from 'next';
 import {Geist, Geist_Mono} from 'next/font/google';
 import './globals.css';
+import { AuthProvider } from '@/context/AuthContext';
 import { Toaster } from "@/components/ui/toaster" // Import Toaster
 
 const geistSans = Geist({
@@ -55,8 +56,10 @@ export default function RootLayout({
           <link rel="shortcut icon" href="/favicon.ico" />
         </head>
         <body className={`${geistSans.variable} ${geistMono.variable} antialiased`}>
+          <AuthProvider>
           {children}
-          <Toaster /> {/* Add Toaster here */}
+          <Toaster />
+          </AuthProvider>
         </body>
       </html>
   );
