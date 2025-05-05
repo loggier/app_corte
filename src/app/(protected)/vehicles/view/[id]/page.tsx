@@ -5,7 +5,7 @@ import { getVehicleById } from './getVehicleData';
 import ViewVehicleClient from './_components/view-vehicle-client';
 import { Vehicle } from '@/lib/definitions';
 
-export async function generateStaticParams() {
+export async function _generateStaticParams() {
   const vehiclesCollection = collection(db, 'vehicles');
   const vehicleSnapshot = await getDocs(vehiclesCollection);
 

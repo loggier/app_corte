@@ -44,8 +44,7 @@ async function getVehicleById(id: string): Promise<Vehicle | null> {
     return null;
   }
 }
-// New function to generate static params.
-export async function generateStaticParams() {
+export async function _generateStaticParams() {
   const vehiclesCollection = collection(db, 'vehicles');
   const vehicleSnapshot = await getDocs(vehiclesCollection);
   const params = vehicleSnapshot.docs.map(doc => ({
