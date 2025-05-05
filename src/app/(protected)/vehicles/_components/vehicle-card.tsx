@@ -9,18 +9,20 @@ import { Button } from '@/components/ui/button'
 import { Pencil, Trash2, MapPin, Palette, Calendar, Wrench, Eye, Car, Bike } from 'lucide-react' // Added Car, Bike icons
 import { useState, useEffect } from 'react'; // Import useState and useEffect
 
-import { deleteDoc, doc } from 'firebase/firestore';
-import { db } from '@/firebase/config';
 import { useRouter } from 'next/navigation';
+import { deleteVehicleAction } from '@/app/(protected)/vehicles/actions'; // Importa la Server Action
 import { useToast } from '@/hooks/use-toast';
 
-interface VehicleCardProps { vehicle: Vehicle; }
+interface VehicleCardProps {
+    vehicle: Vehicle;
+    onVehicleDeleted: () => void;
+  }
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
 
-export default function VehicleCard({ vehicle }: VehicleCardProps) {
+export default function VehicleCard({ vehicle, onVehicleDeleted }: VehicleCardProps) {
     const router = useRouter();
     const { toast } = useToast();
-    const [userProfile, setUserProfile] = useState<string | null>(null); // State for user profile
+    const [userProfile, setUserProfile] = useState<string | null>(null);
 
     useEffect(() => {
         // Fetch user data from localStorage on the client side
@@ -37,22 +39,36 @@ export default function VehicleCard({ vehicle }: VehicleCardProps) {
 
 
     const handleDelete = async () => {
-          try {
-            await deleteDoc(doc(db, 'vehicles', vehicle.id));
-            toast({
-                title: 'Success',
-                description: 'Vehicle deleted successfully.',
-            });
-            router.refresh();
-            } catch (error) {
-                console.error('Error deleting vehicle:', error);
+        try {
+            // Llama a la Server Action para eliminar y revalidar
+            const result = await deleteVehicleAction(vehicle.id);
+
+            if (result.success) {
+               
+                toast({
+                  title: 'Success',
+                  description: 'Vehicle deleted successfully.',
+                });
+                onVehicleDeleted();
+               
+                // Ya no necesitas router.refresh() aquí, la Server Action lo maneja
+            } else {
+
+                console.error('Server Action Delete failed:', result.error);
                 toast({
                     title: 'Error',
-                    description: 'Failed to delete vehicle.',
+                    description: `Failed to delete vehicle: ${result.error}`,
+                    variant: 'destructive',
+                });
+                }
+        } catch (error) {
+                console.error('Unexpected error during deletion:', error);
+                toast({
+                    title: 'Error',
+                    description: 'An unexpected error occurred while trying to delete the vehicle.',
                     variant: 'destructive',
                 });
             }
-
 
     };
 
@@ -94,7 +110,6 @@ export default function VehicleCard({ vehicle }: VehicleCardProps) {
                 <span className="sr-only">Edit</span>
             </Button>
          </Link>
-         {/* Conditionally render the delete button based on user profile */}
          {userProfile !== 'tecnico' && (
           <AlertDialog>
             <AlertDialogTrigger asChild>
