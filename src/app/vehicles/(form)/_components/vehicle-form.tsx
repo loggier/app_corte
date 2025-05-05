@@ -3,6 +3,12 @@
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useForm } from 'react-hook-form';
 import * as z from 'zod';
+import { useState, useEffect, useMemo } from 'react';
+import { useRouter } from 'next/navigation';
+import Link from 'next/link';
+import { collection, addDoc, doc, updateDoc } from 'firebase/firestore';
+import { Save, Loader2, ArrowLeft, X } from 'lucide-react';
+
 import { Button } from '@/components/ui/button';
 import {
   Form,
@@ -15,245 +21,453 @@ import {
 } from '@/components/ui/form';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
-import type { Vehicle } from '@/lib/definitions';
-import { useRouter } from 'next/navigation';
-import { addVehicle, updateVehicle } from '@/lib/mock-data';
-import { useToast } from "@/hooks/use-toast";
-import { Save, Loader2, ArrowLeft } from 'lucide-react';
-import { useState } from 'react';
-import Link from 'next/link';
+import {
+  Select,
+  SelectTrigger,
+  SelectValue,
+  SelectContent,
+  SelectItem,
+} from '@/components/ui/select';
 
-// Define Zod schema for validation
+import type { Vehicle, Brand, Model } from '@/lib/definitions';
+import { useToast } from '@/hooks/use-toast';
+import { getAllBrands, getModelsByBrandId } from '@/firebase/data/brandsModels';
+import { db } from '@/firebase/config';
+
+// Global backend base URL (use env variable in production)
+const BACKEND_BASE_URL = process.env.NEXT_PUBLIC_BACKEND_BASE_URL || 'http://49.12.123.80:3000';
+
+// Validation constants
+const MAX_FILE_SIZE = 5000000;
+const ACCEPTED_IMAGE_TYPES = [
+  'image/jpeg',
+  'image/jpg',
+  'image/png',
+  'image/webp',
+];
+
+// Zod form schema
 const formSchema = z.object({
-  model: z.string().min(2, { message: 'Model must be at least 2 characters.' }).max(50),
-  year: z.coerce.number().int().min(1900, { message: 'Year must be after 1900.' }).max(new Date().getFullYear() + 1, { message: `Year cannot be in the future.` }),
-  corte: z.string().min(1, {message: 'Corte is required.'}).max(50),
-  bomba: z.string().min(1, {message: 'Bomba is required.'}).max(50),
-  corteIgnicion: z.string().min(1, {message: 'Corte Ignicion is required.'}).max(50),
-  colors: z.string().min(3, {message: 'Color(s) required.'}).max(100),
-  ubicacion: z.string().min(3, {message: 'Location is required.'}).max(100),
-  imageUrl: z.string().url({ message: 'Please enter a valid URL.' }).optional().or(z.literal('')),
+  brand: z.string().min(1, { message: 'Brand is required.' }),
+  model: z
+    .string()
+    .min(2, { message: 'Model must be at least 2 characters.' })
+    .max(50),
+  year: z
+    .coerce.number()
+    .int()
+    .min(1900, { message: 'Year must be after 1900.' })
+    .max(new Date().getFullYear() + 1, { message: 'Year cannot be in the future.' }),
+  corte: z.string().min(1, { message: 'Corte is required.' }),
+  colors: z
+    .string()
+    .min(3, { message: 'Color(s) required.' })
+    .max(100),
+  ubicacion: z
+    .string()
+    .min(3, { message: 'Location is required.' })
+    .max(100),
+  existingImageUrls: z.array(z.string().url()).optional(),
+  images: z
+    .array(z.instanceof(File))
+    .max(5, { message: 'You can only upload up to 5 images.' })
+    .refine((files) => files.every((file) => file.size <= MAX_FILE_SIZE), {
+      message: 'Max image size is 5MB.',
+    })
+    .refine((files) => files.every((file) => ACCEPTED_IMAGE_TYPES.includes(file.type)), {
+      message: 'Only .jpg, .jpeg, .png and .webp formats are supported.',
+    })
+    .optional(),
   observation: z.string().max(500).optional(),
 });
 
 type VehicleFormValues = z.infer<typeof formSchema>;
 
 interface VehicleFormProps {
-  initialData?: Vehicle | null; // Make initialData optional and nullable
-  vehicleId?: string; // Pass vehicleId for editing
+  initialData?: Vehicle | null;
+  vehicleId?: string;
 }
 
-export default function VehicleForm({ initialData, vehicleId }: VehicleFormProps) {
+export default function VehicleForm({ initialData = null, vehicleId }: VehicleFormProps) {
   const router = useRouter();
   const { toast } = useToast();
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [brands, setBrands] = useState<Brand[]>([]);
+  const [models, setModels] = useState<Model[]>([]);
+  const [selectedBrand, setSelectedBrand] = useState<string>(initialData?.brand || '');
+  const [existingImageUrls, setExistingImageUrls] = useState<string[]>(
+    initialData?.imageUrls || []
+  );
+  const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
+  const [imagePreviews, setImagePreviews] = useState<string[]>([]);
+
+  // Fetch brands
+  useEffect(() => {
+    getAllBrands().then(setBrands);
+  }, []);
+
+  // Fetch models on brand change
+  useEffect(() => {
+    if (selectedBrand) {
+      getModelsByBrandId(selectedBrand).then(setModels);
+    } else {
+      setModels([]);
+    }
+  }, [selectedBrand]);
+
+  // Update image previews
+  useEffect(() => {
+    const previews = [...existingImageUrls];
+    selectedFiles.forEach((file) => {
+      const reader = new FileReader();
+      reader.onload = () => {
+        if (reader.result) {
+          previews.push(reader.result as string);
+          setImagePreviews([...previews]);
+        }
+      };
+      reader.readAsDataURL(file);
+    });
+    if (!selectedFiles.length) {
+      setImagePreviews(previews);
+    }
+  }, [existingImageUrls, selectedFiles]);
+
+  const handleFileChange = (files: File[]) => {
+    setSelectedFiles(files.slice(0, 5));
+  };
 
   const form = useForm<VehicleFormValues>({
     resolver: zodResolver(formSchema),
-    defaultValues: initialData ? {
-      ...initialData,
-      imageUrl: initialData.imageUrl ?? '', // Ensure imageUrl is '' if null/undefined
-      observation: initialData.observation ?? '', // Ensure observation is '' if null/undefined
-    } : { // Provide default empty values for a new form
-      model: '',
-      year: undefined, // Use undefined for number input initially
-      corte: '',
-      bomba: '',
-      corteIgnicion: '',
-      colors: '',
-      ubicacion: '',
-      imageUrl: '',
-      observation: '',
-    },
+    defaultValues: initialData
+      ? {
+          brand: initialData.brand,
+          model: initialData.model,
+          year: initialData.year,
+          corte: initialData.corte,
+          colors: initialData.colors,
+          ubicacion: initialData.ubicacion,
+          existingImageUrls: initialData.imageUrls || [],
+          images: undefined,
+          observation: initialData.observation || '',
+        }
+      : {
+          brand: '',
+          model: '',
+          year: undefined,
+          corte: '',
+          colors: '',
+          ubicacion: '',
+          existingImageUrls: [],
+          images: undefined,
+          observation: '',
+        },
   });
 
-  const onSubmit = async (values: VehicleFormValues) => {
-     setIsSubmitting(true);
-     try {
-        let result;
-        if (vehicleId && initialData) {
-         // Update existing vehicle
-         result = await updateVehicle(vehicleId, values);
-         toast({
-             title: "Success",
-             description: "Vehicle updated successfully.",
-         });
-        } else {
-         // Add new vehicle
-         result = await addVehicle(values);
-          toast({
-             title: "Success",
-             description: "Vehicle added successfully.",
-         });
-        }
-
-        if (result) {
-            router.push('/vehicles'); // Redirect to list after success
-            router.refresh(); // Refresh server data
-        } else {
-             toast({
-                title: "Error",
-                description: `Failed to ${vehicleId ? 'update' : 'add'} vehicle.`,
-                variant: "destructive",
-             });
-        }
-     } catch (error) {
-        console.error("Form submission error:", error);
-         toast({
-             title: "Error",
-             description: "An unexpected error occurred.",
-             variant: "destructive",
-         });
-     } finally {
-        setIsSubmitting(false);
-     }
+  const removeExistingImage = (url: string) => {
+    const updated = existingImageUrls.filter((u) => u !== url);
+    setExistingImageUrls(updated);
+    setImagePreviews((prev) => prev.filter((p) => p !== url));
+    form.setValue('existingImageUrls', updated);
   };
 
+  const corteOptions = useMemo(
+    () => [
+      { value: 'Ignición', label: 'Ignición' },
+      { value: 'Bomba de Gasolina', label: 'Bomba de Gasolina' },
+      { value: 'Fusliera', label: 'Fusliera' },
+    ],
+    []
+  );
+
+  const handleBrandChange = (brandId: string) => {
+    setSelectedBrand(brandId);
+    form.setValue('brand', brandId);
+    form.setValue('model', '');
+  };
+
+  const onSubmit = async (values: VehicleFormValues) => {
+    setIsSubmitting(true);
+    try {
+      const { images, existingImageUrls: existingUrls = [], ...rest } = values;
+      let imageUrls = [...existingUrls];
+
+      if (images?.length) {
+        const dataFD = new FormData();
+        images.forEach((img) => dataFD.append('files', img));
+        const resp = await fetch(`${BACKEND_BASE_URL}/upload`, {
+          method: 'POST',
+          body: dataFD,
+        });
+        if (!resp.ok) throw new Error(resp.statusText);
+        const json = await resp.json();
+        if (Array.isArray(json.urls)) {
+          imageUrls = [
+            ...imageUrls,
+            ...json.urls.map((u: string) =>
+              u.replace('http://localhost:3000', BACKEND_BASE_URL)
+            ),
+          ];
+        }
+      }
+
+      const brandName =
+        brands.find((b) => b.id === values.brand)?.name || values.brand;
+      const modelObj = models.find((m) => m.name === values.model);
+
+      const payload = {
+        ...rest,
+        brand: brandName,
+        modelId: modelObj?.id,
+        imageUrls,
+      };
+
+      if (vehicleId && initialData) {
+        // Create the object only for fields that need to be updated in edit mode
+        const refDoc = doc(db, 'vehicles', vehicleId);
+        const updateData: any = {
+            ...rest, // Includes year, corte, colors, ubicacion, observation
+            imageUrls: imageUrls, // Use new and existing image URLs
+        };
+        // Remove modelId and brand to prevent from updating
+        delete updateData.modelId;
+        delete updateData.brand;
+
+        await updateDoc(refDoc, updateData);
+
+        toast({ title: 'Success', description: 'Vehículo actualizado correctamente.' });
+      } else {
+        await addDoc(collection(db, 'vehicles'), payload);
+        toast({ title: 'Success', description: 'Vehículo agregado correctamente.' });
+        router.push('/vehicles');
+      }
+    } catch (err) {
+      console.error(err);
+      toast({
+        title: 'Error',
+        description: 'Ocurrió un error inesperado.',
+        variant: 'destructive',
+      });
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const modelField = selectedBrand || form.getValues('brand') ? (
+    <FormField
+      control={form.control}
+      name="model"
+      render={({ field }) => (
+        <FormItem>
+          <FormLabel>Modelo</FormLabel>
+          {vehicleId && initialData ? (
+            <Input value={initialData.model} disabled />
+          ) : (
+            <FormControl>
+              <Select
+                onValueChange={field.onChange}
+                value={field.value}
+                disabled={isSubmitting}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Seleccione un modelo" />
+                </SelectTrigger>
+                <SelectContent>
+                  {models.map((m) => (
+                    <SelectItem key={m.id} value={m.name}>
+                      {m.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </FormControl>
+          )}
+          <FormMessage />
+        </FormItem>
+      )}
+    />
+  ) : null;
+
   return (
-     <div className="max-w-2xl mx-auto">
-      <Link href="/vehicles" passHref className="inline-flex items-center text-sm text-muted-foreground hover:text-foreground mb-4">
-          <ArrowLeft className="w-4 h-4 mr-1" />
-          Back to Vehicles
+    <div className="max-w-2xl mx-auto">
+      <Link
+        href="/vehicles"
+        passHref
+        className="inline-flex items-center text-sm text-muted-foreground hover:text-foreground mb-4"
+      >
+        <ArrowLeft className="w-4 h-4 mr-1" />
+        Regresar
       </Link>
-    <Form {...form}>
-      <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6 bg-card p-6 rounded-lg shadow-md border">
-        <FormField
-          control={form.control}
-          name="model"
-          render={({ field }) => (
+
+      <Form {...form}>
+        <form
+          onSubmit={form.handleSubmit(onSubmit)}
+          className="space-y-6 bg-card p-6 rounded-lg shadow-md border"
+        >
+          {/* Marca */}
+          <FormField
+            control={form.control}
+            name="brand"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Marca</FormLabel>
+                {vehicleId && initialData ? (
+                  <Input value={initialData.brand} disabled />
+                ) : (
+                  <FormControl>
+                    <Select
+                      onValueChange={handleBrandChange}
+                      value={field.value}
+                      disabled={isSubmitting}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Seleccione la Marca" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {brands.map((b) => (
+                          <SelectItem key={b.id} value={b.id}>
+                            {b.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </FormControl>
+                )}
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+
+          {modelField}
+
+          {/* Año */}
+          <FormField
+            control={form.control}
+            name="year"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Año</FormLabel>
+                <FormControl>
+                  <Input
+                    type="number"
+                    placeholder="Ej., 2023"
+                    {...field}
+                    disabled={isSubmitting}
+                  />
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+
+          {/* Corte */}
+          <FormField
+            control={form.control}
+            name="corte"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Corte</FormLabel>
+                <FormControl>
+                  <Select
+                    onValueChange={field.onChange}
+                    value={field.value}
+                    disabled={isSubmitting}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Seleccione corte" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {corteOptions.map((opt) => (
+                        <SelectItem key={opt.value} value={opt.value}>
+                          {opt.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+
+        <FormField control={form.control} name="colors" render={({ field }) => (
             <FormItem>
-              <FormLabel>Model</FormLabel>
+              <FormLabel>Color(es) de cable</FormLabel>
               <FormControl>
-                <Input placeholder="e.g., Toyota Camry" {...field} disabled={isSubmitting} />
+                <Input placeholder="Ej., Rojo, Azul" {...field} disabled={isSubmitting} />
+              </FormControl>
+              <FormDescription>Separa con comas para varios colores.</FormDescription>
+              <FormMessage />
+            </FormItem>
+          )} />
+
+          <FormField control={form.control} name="ubicacion" render={({ field }) => (
+            <FormItem>
+              <FormLabel>Ubicación</FormLabel>
+              <FormControl>
+                <Input placeholder="Ej. Bajo el tablero.." {...field} disabled={isSubmitting} />
               </FormControl>
               <FormMessage />
             </FormItem>
-          )}
-        />
-        <FormField
-          control={form.control}
-          name="year"
-          render={({ field }) => (
+          )} />
+
+          <FormField control={form.control} name="images" render={({ field }) => (
             <FormItem>
-              <FormLabel>Year</FormLabel>
+              <FormLabel>Imágenes</FormLabel>
               <FormControl>
-                <Input type="number" placeholder="e.g., 2023" {...field} disabled={isSubmitting}/>
-              </FormControl>
-              <FormMessage />
-            </FormItem>
-          )}
-        />
-         <FormField
-          control={form.control}
-          name="corte"
-          render={({ field }) => (
-            <FormItem>
-              <FormLabel>Corte</FormLabel>
-              <FormControl>
-                <Input placeholder="e.g., Sistema X" {...field} disabled={isSubmitting}/>
-              </FormControl>
-              <FormMessage />
-            </FormItem>
-          )}
-        />
-         <FormField
-          control={form.control}
-          name="bomba"
-          render={({ field }) => (
-            <FormItem>
-              <FormLabel>Bomba</FormLabel>
-              <FormControl>
-                <Input placeholder="e.g., Tipo Y" {...field} disabled={isSubmitting}/>
-              </FormControl>
-              <FormMessage />
-            </FormItem>
-          )}
-        />
-         <FormField
-          control={form.control}
-          name="corteIgnicion"
-          render={({ field }) => (
-            <FormItem>
-              <FormLabel>Corte Ignicion</FormLabel>
-              <FormControl>
-                <Input placeholder="e.g., Metodo Z" {...field} disabled={isSubmitting}/>
-              </FormControl>
-              <FormMessage />
-            </FormItem>
-          )}
-        />
-        <FormField
-          control={form.control}
-          name="colors"
-          render={({ field }) => (
-            <FormItem>
-              <FormLabel>Color(s)</FormLabel>
-              <FormControl>
-                <Input placeholder="e.g., Red, Blue" {...field} disabled={isSubmitting}/>
-              </FormControl>
-               <FormDescription>
-                Separate multiple colors with commas.
-              </FormDescription>
-              <FormMessage />
-            </FormItem>
-          )}
-        />
-        <FormField
-          control={form.control}
-          name="ubicacion"
-          render={({ field }) => (
-            <FormItem>
-              <FormLabel>Location (Ubicación)</FormLabel>
-              <FormControl>
-                <Input placeholder="e.g., Main Lot, Section B" {...field} disabled={isSubmitting}/>
-              </FormControl>
-              <FormMessage />
-            </FormItem>
-          )}
-        />
-        <FormField
-          control={form.control}
-          name="imageUrl"
-          render={({ field }) => (
-            <FormItem>
-              <FormLabel>Image URL</FormLabel>
-              <FormControl>
-                <Input type="url" placeholder="https://example.com/image.jpg" {...field} disabled={isSubmitting}/>
-              </FormControl>
-               <FormDescription>
-                Optional: Provide a link to an image of the vehicle.
-              </FormDescription>
-              <FormMessage />
-            </FormItem>
-          )}
-        />
-        <FormField
-          control={form.control}
-          name="observation"
-          render={({ field }) => (
-            <FormItem>
-              <FormLabel>Observation</FormLabel>
-              <FormControl>
-                <Textarea
-                  placeholder="Any additional notes about the vehicle..."
-                  className="resize-none"
-                  {...field}
-                  rows={4}
+                <Input
+                  type="file"
+                  multiple
+                  accept="image/*"
+                  onChange={(e) => {
+                    const files = e.target.files ? Array.from(e.target.files) : [];
+                    handleFileChange(files);
+                    field.onChange(files);
+                  }}
                   disabled={isSubmitting}
                 />
               </FormControl>
               <FormMessage />
+              {imagePreviews.length > 0 && (
+                <div className="grid grid-cols-2 md:grid-cols-3 gap-4 mt-4">
+                  {imagePreviews.map((src, idx) => (
+                    <div key={idx} className="relative">
+                      <img src={src} alt={`preview-${idx}`} className="w-full h-24 object-cover rounded-md" />
+                      {existingImageUrls.includes(src) && (
+                        <>
+                          <div className="absolute inset-0 bg-black bg-opacity-50 flex items-center justify-center">
+                            <span className="text-white text-xs">Existente</span>
+                          </div>
+                          <Button size="icon" variant="destructive" className="absolute top-1 right-1" onClick={() => removeExistingImage(src)}>
+                            <X className="w-4 h-4" />
+                          </Button>
+                        </>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
             </FormItem>
-          )}
-        />
-        <div className="flex justify-end">
+          )} />
+
+          <FormField control={form.control} name="observation" render={({ field }) => (
+            <FormItem>
+              <FormLabel>Observación</FormLabel>
+              <FormControl>
+                <Textarea placeholder="Observación adicional..." rows={4} {...field} disabled={isSubmitting} className="resize-none" />
+              </FormControl>
+              <FormMessage />
+            </FormItem>
+          )} />
+
+          <div className="flex justify-end">
             <Button type="submit" disabled={isSubmitting} className="bg-accent text-accent-foreground hover:bg-accent/90">
-                 {isSubmitting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" /> }
-                 {vehicleId ? 'Save Changes' : 'Add Vehicle'}
+              {isSubmitting ? <Loader2 className="animate-spin w-4 h-4 mr-2" /> : <Save className="w-4 h-4 mr-2" />}
+              {vehicleId ? 'Guardar cambio' : 'Agregar Vehículo'}
             </Button>
-        </div>
-      </form>
-    </Form>
+          </div>
+        </form>
+      </Form>
     </div>
   );
 }

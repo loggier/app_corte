@@ -1,12 +1,37 @@
-export type Vehicle = {
+
+export interface Brand {
+  id: string; // El ID del documento generado por Firebase
+  name: string;
+}
+
+export interface Model {
+  id: string; // El ID del documento generado por Firebase
+  name: string;
+  brandId: string; // Para relacionar el modelo con su marca
+}
+export interface Vehicle {
   id: string; // Unique identifier
+  brand: string;
   model: string;
   year: number;
-  corte: string; // Assuming text, could be boolean if it's a yes/no
-  bomba: string; // Assuming text
-  corteIgnicion: string; // Assuming text
-  colors: string; // Could be an array or comma-separated
-  ubicacion: string;
-  imageUrl?: string; // Optional image URL
-  observation?: string; // Optional text area
+  corte: string; // ignicion, bomba de gasolina, fusilera
+  colors: string;
+  ubicacion: string; // ubicacion del corte de motor
+  imageUrls: string[]; // array of url, max 5
+  observation: string; // comentario
+
 };
+
+export interface User {
+  id: string;
+  correo: string;
+  nombre: string;
+  empresa?: string;
+  password?: string; // Password hash - should not be sent to client
+  perfil: 'admin' | 'user'; // Example profiles
+  status: 'activo' | 'inactivo';
+  telefono?: string;
+  createdAt?: any; // Firebase Timestamp or Date
+  updatedAt?: any; // Firebase Timestamp or Date
+}
+

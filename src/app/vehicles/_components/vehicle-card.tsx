@@ -1,41 +1,57 @@
-import Image from 'next/image';
-import Link from 'next/link';
-import type { Vehicle } from '@/lib/definitions';
-import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
-import { Pencil, Trash2, MapPin, Palette, Calendar, Wrench, Fuel } from 'lucide-react';
-import DeleteVehicleButton from './delete-vehicle-button'; // Import the client component
+'use client';
 
-interface VehicleCardProps {
-  vehicle: Vehicle;
-}
+import Image from 'next/image'
+import Link from 'next/link'
+import type { Vehicle } from '@/lib/definitions'
+import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card'
+import { Button } from '@/components/ui/button'
+import { Pencil, Trash2, MapPin, Palette, Calendar, Wrench, Eye } from 'lucide-react'
+
+import { deleteDoc, doc } from 'firebase/firestore';
+import { db } from '@/firebase/config';
+import { useRouter } from 'next/navigation';
+import { useToast } from '@/hooks/use-toast';
+
+interface VehicleCardProps { vehicle: Vehicle; }
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
 
 export default function VehicleCard({ vehicle }: VehicleCardProps) {
+    const router = useRouter();
+    const { toast } = useToast();
+    const handleDelete = async () => {        
+          try {
+            await deleteDoc(doc(db, 'vehicles', vehicle.id));
+            toast({
+                title: 'Success',
+                description: 'Vehicle deleted successfully.',
+            });
+            router.refresh();
+            } catch (error) {
+                console.error('Error deleting vehicle:', error);
+                toast({
+                    title: 'Error',
+                    description: 'Failed to delete vehicle.',
+                    variant: 'destructive',
+                });
+            }
+        
+        
+    };
+
+    const handleView = () => {
+        router.push(`/vehicles/view/${vehicle.id}`);
+    };
   return (
     <Card className="flex flex-col overflow-hidden shadow-md hover:shadow-lg transition-shadow duration-200">
-      <CardHeader className="p-0">
-        {vehicle.imageUrl && (
-          <div className="relative h-40 w-full">
-            <Image
-              src={vehicle.imageUrl}
-              alt={`Image of ${vehicle.model}`}
-              layout="fill"
-              objectFit="cover"
-              className="rounded-t-lg"
-              data-ai-hint={`${vehicle.model} car`}
-            />
-          </div>
-        )}
-      </CardHeader>
+    
       <CardContent className="flex-grow p-4 space-y-2">
-        <CardTitle className="text-lg font-semibold text-primary truncate">{vehicle.model}</CardTitle>
+        <CardTitle className="text-lg font-semibold text-primary truncate">{vehicle.brand} - {vehicle.model}</CardTitle>
         <div className="text-sm text-muted-foreground space-y-1">
-            <div className="flex items-center gap-1.5"> <Calendar className="w-3.5 h-3.5"/> Year: {vehicle.year}</div>
-            <div className="flex items-center gap-1.5"> <Palette className="w-3.5 h-3.5"/> Colors: {vehicle.colors}</div>
-            <div className="flex items-center gap-1.5"> <MapPin className="w-3.5 h-3.5"/> Location: {vehicle.ubicacion}</div>
+            <div className="flex items-center gap-1.5"> <Calendar className="w-3.5 h-3.5"/> Año: {vehicle.year}</div>
+            <div className="flex items-center gap-1.5"> <Palette className="w-3.5 h-3.5"/> Color de Cable: {vehicle.colors}</div>
             <div className="flex items-center gap-1.5"> <Wrench className="w-3.5 h-3.5"/> Corte: {vehicle.corte}</div>
-             <div className="flex items-center gap-1.5"> <Fuel className="w-3.5 h-3.5"/> Bomba: {vehicle.bomba}</div>
-             <div className="flex items-center gap-1.5"> <Wrench className="w-3.5 h-3.5"/> Corte Ignición: {vehicle.corteIgnicion}</div>
+            <div className="flex items-center gap-1.5"> <MapPin className="w-3.5 h-3.5"/> Ubicación de corte: {vehicle.ubicacion}</div>
+
         </div>
          {vehicle.observation && (
             <CardDescription className="text-xs pt-2 border-t border-border">
@@ -43,14 +59,35 @@ export default function VehicleCard({ vehicle }: VehicleCardProps) {
             </CardDescription>
          )}
       </CardContent>
-      <CardFooter className="p-4 pt-0 border-t border-border flex justify-end gap-2">
+        <CardFooter className="p-4 pt-0 border-t border-border flex justify-between gap-2">
+         <Button variant="ghost" size="sm" onClick={handleView}>
+             <Eye className="h-4 w-4" /> <span className="sr-only">View</span>
+         </Button>
          <Link href={`/vehicles/edit/${vehicle.id}`} passHref>
             <Button variant="outline" size="sm">
                 <Pencil className="h-4 w-4" />
                 <span className="sr-only">Edit</span>
             </Button>
          </Link>
-        <DeleteVehicleButton vehicleId={vehicle.id} />
+         <AlertDialog>
+            <AlertDialogTrigger asChild>
+              <Button variant="destructive" size="sm">
+                <Trash2 className="h-4 w-4" />
+                <span className="sr-only">Delete</span>
+              </Button>
+            </AlertDialogTrigger>
+            <AlertDialogContent>
+              <AlertDialogHeader>
+                <AlertDialogTitle>¿Esta seguro de eliminar el vehículo?</AlertDialogTitle>
+                <AlertDialogDescription>Esta acción no se puede revertir.</AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                <AlertDialogAction onClick={handleDelete}>Eliminar</AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
+
       </CardFooter>
     </Card>
   );

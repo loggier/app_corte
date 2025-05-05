@@ -18,13 +18,14 @@ body {
     --card-foreground: 200 19% 20%;
     --popover: 0 0% 100%;
     --popover-foreground: 200 19% 20%;
+
     --primary: 207 90% 54%; /* Blue */
     --primary-foreground: 0 0% 100%; /* White */
     --secondary: 200 19% 90%; /* Lighter Grey */
     --secondary-foreground: 200 19% 20%; /* Darker Grey */
     --muted: 200 19% 95%; /* Very Light Grey */
     --muted-foreground: 200 19% 46%; /* Grey */
-    --accent: 174 100% 29%; /* Teal */
+    --accent: 0 0% 0%; /* Black */
     --accent-foreground: 0 0% 100%; /* White */
     --destructive: 0 84.2% 60.2%; /* Default Red */
     --destructive-foreground: 0 0% 98%;
@@ -46,6 +47,7 @@ body {
     --sidebar-border: 200 19% 85%; /* Light Grey */
     --sidebar-ring: 174 100% 29%; /* Teal */
   }
+  :root .dark {
   .dark {
     /* Using default dark theme, adjust if specific dark theme colors are needed */
     --background: 200 19% 10%; /* Dark Grey Blue */
@@ -60,7 +62,7 @@ body {
     --secondary-foreground: 0 0% 98%; /* Almost White */
     --muted: 200 19% 20%; /* Darker Grey */
     --muted-foreground: 200 19% 60%; /* Lighter Grey */
-    --accent: 174 100% 35%; /* Slightly lighter Teal */
+    --accent: 0 0% 0%; /* Black */
     --accent-foreground: 0 0% 98%; /* Almost White */
     --destructive: 0 62.8% 30.6%;
     --destructive-foreground: 0 0% 98%;
@@ -80,6 +82,7 @@ body {
     --sidebar-accent-foreground: 0 0% 98%; /* Almost White */
     --sidebar-border: 200 19% 20%; /* Darker Grey */
     --sidebar-ring: 174 100% 35%; /* Teal */
+  }
   }
 }
 

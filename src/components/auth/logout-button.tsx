@@ -8,17 +8,19 @@ export default function LogoutButton() {
   const router = useRouter();
 
   const handleLogout = () => {
-    // --- Mock Logout Logic ---
+    // Clear authentication state
     localStorage.removeItem('isAuthenticated');
-    // In a real app, you might also need to invalidate the token on the backend
-    // --- End Mock Logout Logic ---
+    localStorage.removeItem('user');
+    // In a real app, you might also need to invalidate the token/session on the backend
     router.push('/login');
+    // Optionally force a full reload to clear any component state
+    // window.location.href = '/login';
   };
 
   return (
     <Button variant="ghost" className="w-full justify-start text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground" onClick={handleLogout}>
       <LogOut className="mr-2 h-4 w-4" />
-      <span>Sign Out</span>
+      <span>Salir</span>
     </Button>
   );
 }

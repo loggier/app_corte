@@ -14,9 +14,11 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
   AlertDialogTrigger,
+  
 } from '@/components/ui/alert-dialog';
-import { deleteVehicle } from '@/lib/mock-data'; // Using mock API for now
 import { useToast } from "@/hooks/use-toast";
+import { deleteDoc, doc } from 'firebase/firestore'; // Import deleteDoc and doc
+import { db } from '@/firebase/config'; // Import your Firebase config
 
 
 interface DeleteVehicleButtonProps {
@@ -31,38 +33,29 @@ export default function DeleteVehicleButton({ vehicleId }: DeleteVehicleButtonPr
 
   const handleDelete = async () => {
     setIsDeleting(true);
-    try {
-      const success = await deleteVehicle(vehicleId);
-      if (success) {
+      try {
+        await deleteDoc(doc(db, 'vehicles', vehicleId)); // Delete from Firebase
         toast({
-           title: "Success",
-           description: "Vehicle deleted successfully.",
-           variant: "default",
-         });
-        // Refresh the page or the specific data list
-         router.refresh(); // Simple refresh for now
-         setIsOpen(false); // Close the dialog on success
-      } else {
-         toast({
-           title: "Error",
-           description: "Failed to delete vehicle.",
-           variant: "destructive",
-         });
+          title: "Success",
+          description: "Vehicle deleted successfully.",
+          variant: "default",
+        });
+        router.refresh(); // Refresh the page
+        setIsOpen(false); // Close the dialog on success
+      } catch (error) {
+        console.error('Delete failed:', error);
+        toast({
+          title: "Error",
+          description: "Failed to delete vehicle.",
+          variant: "destructive",
+        });
+      } finally {
+        setIsDeleting(false);
       }
-    } catch (error) {
-      console.error('Delete failed:', error);
-      toast({
-        title: "Error",
-        description: "An unexpected error occurred.",
-        variant: "destructive",
-      });
-    } finally {
-      setIsDeleting(false);
-    }
-  };
+    };
 
-  return (
-    <AlertDialog open={isOpen} onOpenChange={setIsOpen}>
+    return (
+      <AlertDialog open={isOpen} onOpenChange={setIsOpen}>
       <AlertDialogTrigger asChild>
         <Button variant="destructive" size="sm" disabled={isDeleting}>
           {isDeleting ? (
@@ -91,3 +84,4 @@ export default function DeleteVehicleButton({ vehicleId }: DeleteVehicleButtonPr
     </AlertDialog>
   );
 }
+
