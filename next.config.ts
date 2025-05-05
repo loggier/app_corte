@@ -8,7 +8,6 @@ const withPWA = require('next-pwa')({
 
 const nextConfig = {
   /* config options here */
-  output: 'export', // Agrega esta línea
   typescript: {
     ignoreBuildErrors: true,
   },

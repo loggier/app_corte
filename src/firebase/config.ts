@@ -1,24 +1,27 @@
 // Importa las funciones necesarias de Firebase SDK
-import { initializeApp } from 'firebase/app';
+import { initializeApp, getApps, getApp, FirebaseOptions } from 'firebase/app';
 import { getFirestore } from 'firebase/firestore';
-import { getStorage } from 'firebase/storage';
-
+ 
 // Tu configuración de Firebase (del lado del cliente)
 // Puedes encontrar esto en la configuración de tu proyecto en la consola de Firebase
-const firebaseConfig = {
-  apiKey: "AIzaSyCMkqWIKd-H7TxpAljCs_-OfTqmR3TfLhU",
-  authDomain: "rastreo-a983f.firebaseapp.com",
-  projectId: "rastreo-a983f",
-  storageBucket: "rastreo-a983f.firebasestorage.app",
-  messagingSenderId: "924951798569",
-  appId: "1:924951798569:web:2969dd29fbc9b04c7d8d38"
+const firebaseConfig: FirebaseOptions = {
+  apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY, // Use NEXT_PUBLIC_ prefix for client-side access
+  authDomain: process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN,
+  projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID,
+  storageBucket: process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET,
+  messagingSenderId: process.env.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID,
+  appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID,
+  measurementId: process.env.NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID, // Optional: for Analytics
 };
 
-// Inicializa Firebase
-const app = initializeApp(firebaseConfig);
-
+// Initialize Firebase for client-side usage
+let firebaseApp;
+if (!getApps().length) {
+  firebaseApp = initializeApp(firebaseConfig);
+} else {
+  firebaseApp = getApp();
+}
 // Exporta las instancias de los servicios que necesitas
-const db = getFirestore(app);
-const storage = getStorage(app);
-
-export { db, storage };
+const db = getFirestore(firebaseApp);
+ 
+export { db };
