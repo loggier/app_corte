@@ -17,8 +17,12 @@
 /.next/
 /out/
 
+/android/
+/ios/
+
 # production
 /build
+
 
 # misc
 .DS_Store
