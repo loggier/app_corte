@@ -14,6 +14,7 @@ import { LogIn, Loader2 } from 'lucide-react';
 import { db } from '@/firebase/config'; // Import your Firebase config
 import { useToast } from '@/hooks/use-toast';
 import type { User } from '@/lib/definitions';
+import type { UserData } from '@/lib/definitions';
 
 
 export default function LoginPage() {
@@ -25,6 +26,24 @@ export default function LoginPage() {
   const [isLoading, setIsLoading] = useState(false);
   const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
   const [showInstallButton, setShowInstallButton] = useState(false);// Initialize to false
+
+
+  useEffect(() => {
+    const checkAuthentication = () => {
+      const isAuthenticated = localStorage.getItem('isAuthenticated');
+      const userString = localStorage.getItem('user');
+      const user: UserData | null = userString ? JSON.parse(userString) : null;
+
+      const isValidSession = isAuthenticated === 'true' && user !== null && user.status === 'activo';
+
+      if (isValidSession) {
+        router.push('/vehicles');
+      }
+    };
+
+    checkAuthentication();
+  }, [router]);
+
 
   useEffect(() => {
     if (typeof window !== 'undefined') {
