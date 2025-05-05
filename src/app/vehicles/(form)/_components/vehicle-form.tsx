@@ -1,3 +1,4 @@
+
 'use client';
 
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -54,7 +55,7 @@ const formSchema = z.object({
     .min(2, { message: 'Model must be at least 2 characters.' })
     .max(50),
   year: z
-    .coerce.number()
+    .coerce.number({ invalid_type_error: 'Year must be a number.' })
     .int()
     .min(1900, { message: 'Year must be after 1900.' })
     .max(new Date().getFullYear() + 1, { message: 'Year cannot be in the future.' }),
@@ -95,7 +96,7 @@ export default function VehicleForm({ initialData = null, vehicleId }: VehicleFo
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [brands, setBrands] = useState<Brand[]>([]);
   const [models, setModels] = useState<Model[]>([]);
-  const [selectedBrand, setSelectedBrand] = useState<string>(initialData?.brand || '');
+  const [selectedBrand, setSelectedBrand] = useState<string>(initialData?.brandId || ''); // Use brandId for consistency if available
   const [existingImageUrls, setExistingImageUrls] = useState<string[]>(
     initialData?.imageUrls || []
   );
@@ -132,7 +133,15 @@ export default function VehicleForm({ initialData = null, vehicleId }: VehicleFo
     if (!selectedFiles.length) {
       setImagePreviews(previews);
     }
-  }, [existingImageUrls, selectedFiles]);
+    // Cleanup function to revoke object URLs if needed
+    return () => {
+        imagePreviews.forEach(preview => {
+            if (preview.startsWith('blob:')) {
+                URL.revokeObjectURL(preview);
+            }
+        });
+    };
+  }, [existingImageUrls, selectedFiles]); // Dependency array needs review if previews cause issues
 
   const handleFileChange = (files: File[]) => {
     setSelectedFiles(files.slice(0, 5));
@@ -142,7 +151,7 @@ export default function VehicleForm({ initialData = null, vehicleId }: VehicleFo
     resolver: zodResolver(formSchema),
     defaultValues: initialData
       ? {
-          brand: initialData.brand,
+          brand: initialData.brandId || brands.find(b => b.name === initialData.brand)?.id || '', // Prefer brandId, fallback to lookup
           model: initialData.model,
           year: initialData.year,
           tipo: initialData.tipo || 'Auto', // Set default 'Auto' if missing
@@ -150,13 +159,13 @@ export default function VehicleForm({ initialData = null, vehicleId }: VehicleFo
           colors: initialData.colors,
           ubicacion: initialData.ubicacion,
           existingImageUrls: initialData.imageUrls || [],
-          images: undefined,
+          images: undefined, // Files are handled separately
           observation: initialData.observation || '',
         }
       : {
           brand: '',
           model: '',
-          year: undefined,
+          year: '' as any, // Initialize with empty string to avoid uncontrolled error
           tipo: 'Auto', // Default for new vehicles
           corte: '',
           colors: '',
@@ -167,12 +176,54 @@ export default function VehicleForm({ initialData = null, vehicleId }: VehicleFo
         },
   });
 
+   // Effect to set the selected brand when editing and brands are loaded
+   useEffect(() => {
+    if (initialData && brands.length > 0) {
+        const initialBrandId = brands.find(b => b.name === initialData.brand)?.id || '';
+        setSelectedBrand(initialBrandId);
+        form.setValue('brand', initialBrandId, { shouldValidate: true }); // Set brand in form
+    }
+    }, [initialData, brands, form]);
+
+
+   // Effect to set the selected model when editing and models are loaded
+   useEffect(() => {
+    if (initialData && models.length > 0 && !form.getValues('model')) {
+        // Check if the initial model name exists in the loaded models
+        const modelExists = models.some(m => m.name === initialData.model);
+        if (modelExists) {
+            form.setValue('model', initialData.model, { shouldValidate: true });
+        }
+    }
+  }, [initialData, models, form]);
+
+
   const removeExistingImage = (url: string) => {
     const updated = existingImageUrls.filter((u) => u !== url);
     setExistingImageUrls(updated);
     setImagePreviews((prev) => prev.filter((p) => p !== url));
     form.setValue('existingImageUrls', updated);
   };
+
+  const removeSelectedFile = (index: number) => {
+    const fileToRemove = selectedFiles[index];
+    const dataTransfer = new DataTransfer();
+    const updatedFiles = selectedFiles.filter((_, i) => i !== index);
+    updatedFiles.forEach(file => dataTransfer.items.add(file));
+
+    // Find the input element and update its files property
+    const fileInput = document.querySelector('input[type="file"]') as HTMLInputElement | null;
+    if (fileInput) {
+        fileInput.files = dataTransfer.files;
+        // Manually trigger the change event for react-hook-form
+        const event = new Event('change', { bubbles: true });
+        fileInput.dispatchEvent(event);
+    }
+
+    setSelectedFiles(updatedFiles);
+    form.setValue('images', updatedFiles); // Update RHF state
+};
+
 
   const corteOptions = useMemo(
     () => [
@@ -194,7 +245,9 @@ export default function VehicleForm({ initialData = null, vehicleId }: VehicleFo
   const handleBrandChange = (brandId: string) => {
     setSelectedBrand(brandId);
     form.setValue('brand', brandId);
-    form.setValue('model', '');
+    form.setValue('model', ''); // Reset model when brand changes
+    setModels([]); // Clear models immediately
+    getModelsByBrandId(brandId).then(setModels); // Fetch new models
   };
 
   const onSubmit = async (values: VehicleFormValues) => {
@@ -210,7 +263,7 @@ export default function VehicleForm({ initialData = null, vehicleId }: VehicleFo
           method: 'POST',
           body: dataFD,
         });
-        if (!resp.ok) throw new Error(resp.statusText);
+        if (!resp.ok) throw new Error(`Image upload failed: ${resp.statusText}`);
         const json = await resp.json();
         if (Array.isArray(json.urls)) {
           imageUrls = [
@@ -219,45 +272,67 @@ export default function VehicleForm({ initialData = null, vehicleId }: VehicleFo
               u.replace('http://localhost:3000', BACKEND_BASE_URL)
             ),
           ];
+        } else {
+            throw new Error('Invalid response format from image upload server');
         }
       }
 
-      const brandName =
-        brands.find((b) => b.id === values.brand)?.name || values.brand;
-      const modelObj = models.find((m) => m.name === values.model);
+      const brandObj = brands.find((b) => b.id === values.brand);
+      if (!brandObj) throw new Error("Selected brand not found");
 
-      const payload = {
+      const modelObj = models.find((m) => m.name === values.model);
+      // If it's a new vehicle, modelObj must exist
+      if (!vehicleId && !modelObj) throw new Error("Selected model not found");
+
+
+      const payload: Partial<Vehicle> & { brandId?: string; modelId?: string } = {
         ...rest,
-        brand: brandName,
-        modelId: modelObj?.id,
+        brand: brandObj.name, // Store brand name
+        brandId: brandObj.id, // Store brand ID
+        modelId: modelObj?.id, // Store model ID if found
         imageUrls,
         tipo: values.tipo || 'Auto', // Ensure tipo is included, default to 'Auto' if somehow undefined
       };
 
+      // Remove potentially undefined observation if empty
+      if (!payload.observation) {
+        delete payload.observation;
+      }
+
+
       if (vehicleId && initialData) {
-        // Create the object only for fields that need to be updated in edit mode
+        // Update existing document
         const refDoc = doc(db, 'vehicles', vehicleId);
+        // Only include fields that were actually submitted in the form
+        // Brand and Model cannot be changed in edit mode per current UI logic
         const updateData: any = {
-            ...rest, // Includes year, corte, colors, ubicacion, observation, tipo
-            imageUrls: imageUrls, // Use new and existing image URLs
+            year: payload.year,
+            corte: payload.corte,
+            colors: payload.colors,
+            ubicacion: payload.ubicacion,
+            tipo: payload.tipo,
+            imageUrls: payload.imageUrls, // Updated image URLs
+            ...(payload.observation && { observation: payload.observation }), // Conditionally add observation
         };
-        // Remove modelId and brand to prevent from updating
-        delete updateData.modelId;
-        delete updateData.brand;
-
         await updateDoc(refDoc, updateData);
-
         toast({ title: 'Success', description: 'Vehículo actualizado correctamente.' });
+        router.push('/vehicles'); // Redirect after update
+
       } else {
+        // Add new document
+        // Ensure required fields for new doc are present
+        if (!payload.brandId || !payload.modelId || !payload.model) {
+            throw new Error("Missing brand or model information for new vehicle.");
+        }
         await addDoc(collection(db, 'vehicles'), payload);
         toast({ title: 'Success', description: 'Vehículo agregado correctamente.' });
         router.push('/vehicles');
       }
-    } catch (err) {
-      console.error(err);
+    } catch (err: any) {
+      console.error("Error submitting form:", err);
       toast({
         title: 'Error',
-        description: 'Ocurrió un error inesperado.',
+        description: err.message || 'Ocurrió un error inesperado.',
         variant: 'destructive',
       });
     } finally {
@@ -273,23 +348,28 @@ export default function VehicleForm({ initialData = null, vehicleId }: VehicleFo
         <FormItem>
           <FormLabel>Modelo</FormLabel>
           {vehicleId && initialData ? (
-            <Input value={initialData.model} disabled />
+            // Display initial model name but it's not part of the form submission for edit
+             <Input value={initialData.model} disabled />
           ) : (
             <FormControl>
               <Select
                 onValueChange={field.onChange}
-                value={field.value}
-                disabled={isSubmitting}
+                value={field.value} // Ensure this value is controlled
+                disabled={isSubmitting || models.length === 0}
               >
                 <SelectTrigger>
                   <SelectValue placeholder="Seleccione un modelo" />
                 </SelectTrigger>
                 <SelectContent>
-                  {models.map((m) => (
-                    <SelectItem key={m.id} value={m.name}>
-                      {m.name}
-                    </SelectItem>
-                  ))}
+                  {models.length > 0 ? (
+                    models.map((m) => (
+                        <SelectItem key={m.id} value={m.name}>
+                        {m.name}
+                        </SelectItem>
+                    ))
+                    ) : (
+                    <SelectItem value="loading" disabled>Cargando modelos...</SelectItem>
+                 )}
                 </SelectContent>
               </Select>
             </FormControl>
@@ -324,23 +404,28 @@ export default function VehicleForm({ initialData = null, vehicleId }: VehicleFo
               <FormItem>
                 <FormLabel>Marca</FormLabel>
                 {vehicleId && initialData ? (
+                  // Display initial brand name but it's not part of the form submission for edit
                   <Input value={initialData.brand} disabled />
                 ) : (
                   <FormControl>
                     <Select
-                      onValueChange={handleBrandChange}
-                      value={field.value}
+                      onValueChange={(value) => handleBrandChange(value)} // Use handler to manage dependent state
+                      value={field.value} // Ensure this value is controlled
                       disabled={isSubmitting}
                     >
                       <SelectTrigger>
                         <SelectValue placeholder="Seleccione la Marca" />
                       </SelectTrigger>
                       <SelectContent>
-                        {brands.map((b) => (
-                          <SelectItem key={b.id} value={b.id}>
-                            {b.name}
-                          </SelectItem>
-                        ))}
+                       {brands.length > 0 ? (
+                            brands.map((b) => (
+                            <SelectItem key={b.id} value={b.id}>
+                                {b.name}
+                            </SelectItem>
+                            ))
+                        ) : (
+                            <SelectItem value="loading" disabled>Cargando marcas...</SelectItem>
+                        )}
                       </SelectContent>
                     </Select>
                   </FormControl>
@@ -364,6 +449,7 @@ export default function VehicleForm({ initialData = null, vehicleId }: VehicleFo
                     type="number"
                     placeholder="Ej., 2023"
                     {...field}
+                    value={field.value ?? ''} // Ensure value is never undefined
                     disabled={isSubmitting}
                   />
                 </FormControl>
@@ -454,42 +540,69 @@ export default function VehicleForm({ initialData = null, vehicleId }: VehicleFo
           )} />
 
           <FormField control={form.control} name="images" render={({ field }) => (
-            <FormItem>
-              <FormLabel>Imágenes</FormLabel>
-              <FormControl>
-                <Input
-                  type="file"
-                  multiple
-                  accept="image/*"
-                  onChange={(e) => {
-                    const files = e.target.files ? Array.from(e.target.files) : [];
-                    handleFileChange(files);
-                    field.onChange(files);
-                  }}
-                  disabled={isSubmitting}
-                />
-              </FormControl>
-              <FormMessage />
-              {imagePreviews.length > 0 && (
+             <FormItem>
+               <FormLabel>Imágenes</FormLabel>
+               <FormControl>
+                 <Input
+                   type="file"
+                   multiple
+                   accept="image/*"
+                   onChange={(e) => {
+                     const files = e.target.files ? Array.from(e.target.files) : [];
+                     // Filter out files that are already selected or exceed the limit
+                     const newFiles = files.filter(
+                       (file) => !selectedFiles.some((sf) => sf.name === file.name && sf.size === file.size)
+                     );
+                     const combinedFiles = [...selectedFiles, ...newFiles].slice(0, 5 - existingImageUrls.length);
+
+                     handleFileChange(combinedFiles);
+                     field.onChange(combinedFiles); // Update RHF state
+                   }}
+                   disabled={isSubmitting || (existingImageUrls.length + selectedFiles.length >= 5)}
+                 />
+               </FormControl>
+               <FormDescription>
+                 Puedes subir hasta {5 - existingImageUrls.length} imágenes nuevas. Máximo 5 en total.
+               </FormDescription>
+               <FormMessage />
+               {(imagePreviews.length > 0 || selectedFiles.length > 0) && (
                 <div className="grid grid-cols-2 md:grid-cols-3 gap-4 mt-4">
-                  {imagePreviews.map((src, idx) => (
-                    <div key={idx} className="relative">
-                      <img src={src} alt={`preview-${idx}`} className="w-full h-24 object-cover rounded-md" />
-                      {existingImageUrls.includes(src) && (
-                        <>
-                          <div className="absolute inset-0 bg-black bg-opacity-50 flex items-center justify-center">
-                            <span className="text-white text-xs">Existente</span>
-                          </div>
-                          <Button size="icon" variant="destructive" className="absolute top-1 right-1" onClick={() => removeExistingImage(src)}>
+                    {/* Display existing images */}
+                    {existingImageUrls.map((url, idx) => (
+                        <div key={`existing-${idx}`} className="relative group">
+                        <img src={url} alt={`existing-preview-${idx}`} className="w-full h-24 object-cover rounded-md" />
+                        <Button
+                            size="icon"
+                            variant="destructive"
+                            className="absolute top-1 right-1 opacity-0 group-hover:opacity-100 transition-opacity"
+                            onClick={() => removeExistingImage(url)}
+                            type="button"
+                        >
                             <X className="w-4 h-4" />
-                          </Button>
-                        </>
-                      )}
-                    </div>
-                  ))}
+                            <span className="sr-only">Remove existing image</span>
+                        </Button>
+                         <div className="absolute bottom-1 left-1 bg-black bg-opacity-60 text-white text-xs px-1 rounded">Existente</div>
+                        </div>
+                    ))}
+                    {/* Display newly selected file previews */}
+                    {selectedFiles.map((file, idx) => (
+                        <div key={`new-${idx}`} className="relative group">
+                         <img src={URL.createObjectURL(file)} alt={`new-preview-${idx}`} className="w-full h-24 object-cover rounded-md" />
+                        <Button
+                            size="icon"
+                            variant="destructive"
+                            className="absolute top-1 right-1 opacity-0 group-hover:opacity-100 transition-opacity"
+                            onClick={() => removeSelectedFile(idx)}
+                            type="button" // Prevent form submission
+                        >
+                            <X className="w-4 h-4" />
+                            <span className="sr-only">Remove new image</span>
+                        </Button>
+                        </div>
+                    ))}
                 </div>
-              )}
-            </FormItem>
+                )}
+             </FormItem>
           )} />
 
           <FormField control={form.control} name="observation" render={({ field }) => (
@@ -513,3 +626,4 @@ export default function VehicleForm({ initialData = null, vehicleId }: VehicleFo
     </div>
   );
 }
+

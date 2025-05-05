@@ -1,3 +1,4 @@
+
 import { doc, getDoc } from 'firebase/firestore';
 import { db } from '@/firebase/config';
 import { Vehicle } from '@/lib/definitions'; // Adjust path if necessary
@@ -18,7 +19,9 @@ export async function getVehicleById(id: string): Promise<Vehicle | null> {
       imageUrls: vehicleData.imageUrls || [],
       year: vehicleData.year,
       brand: vehicleData.brand,
+      brandId: vehicleData.brandId, // Include brandId
       model: vehicleData.model,
+      modelId: vehicleData.modelId, // Include modelId
       corte: vehicleData.corte,
       colors: vehicleData.colors,
       ubicacion: vehicleData.ubicacion,

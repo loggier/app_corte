@@ -14,13 +14,15 @@ export interface Model {
 export interface Vehicle {
   id: string; // Unique identifier
   brand: string;
+  brandId?: string; // Added: Foreign key to the 'brands' collection
   model: string;
+  modelId?: string; // Added: Foreign key to the 'models' collection
   year: number;
   corte: string; // ignicion, bomba de gasolina, fusilera
   colors: string;
   ubicacion: string; // ubicacion del corte de motor
   imageUrls: string[]; // array of url, max 5
-  observation: string; // comentario
+  observation?: string; // comentario - made optional
   tipo?: 'Auto' | 'Moto'; // New optional field for vehicle type
 
 };
@@ -37,6 +39,7 @@ export interface User {
   createdAt?: any; // Firebase Timestamp or Date
   updatedAt?: any; // Firebase Timestamp or Date
 }
+
 
 
 
