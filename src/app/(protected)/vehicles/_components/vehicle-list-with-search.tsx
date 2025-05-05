@@ -13,7 +13,7 @@ export default function VehicleListWithSearch() {
   const [loading, setLoading] = useState<boolean>(true);
     const searchParams = useSearchParams();
     const [searchTerm, setSearchTerm] = useState('');
-  
+
     // Sync internal state with URL search param on initial load
     useEffect(() => {
       const initialSearch = searchParams.get('search') || '';

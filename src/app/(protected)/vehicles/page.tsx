@@ -3,20 +3,22 @@
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import { PlusCircle } from 'lucide-react';
-import { Suspense, useEffect } from 'react';
+import { Suspense } from 'react'; // Removed useEffect and useRouter
 import VehicleListWithSearch from './_components/vehicle-list-with-search';
-import { useRouter } from 'next/navigation';
-import { useAuth } from '@/context/AuthContext';
+// Removed useRouter and useAuth
 
 export default function VehiclesPage() {
-  const router = useRouter();
-  const { isAuthenticated } = useAuth();
+  // Removed router and isAuthenticated check
+  // const router = useRouter();
+  // const { isAuthenticated } = useAuth();
 
-  useEffect(() => {
-    if (!isAuthenticated) {
-      router.push('/login');
-    }
-  }, [isAuthenticated, router]);
+  // Removed useEffect hook
+  // useEffect(() => {
+  //   if (!isAuthenticated) {
+  //     router.push('/login');
+  //   }
+  // }, [isAuthenticated, router]);
+
   return (
     <div className="container mx-auto">
       <div className="mb-6 flex items-center justify-between">

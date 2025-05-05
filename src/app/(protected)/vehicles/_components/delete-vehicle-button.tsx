@@ -14,7 +14,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
   AlertDialogTrigger,
-  
+
 } from '@/components/ui/alert-dialog';
 import { useToast } from "@/hooks/use-toast";
 import { deleteDoc, doc } from 'firebase/firestore'; // Import deleteDoc and doc

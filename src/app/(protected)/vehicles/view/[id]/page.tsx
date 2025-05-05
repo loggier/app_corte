@@ -1,6 +1,6 @@
 import { notFound } from 'next/navigation';
 import { collection, getDocs } from 'firebase/firestore';
-import { db } from '@/firebase/config'; 
+import { db } from '@/firebase/config';
 import { getVehicleById } from './getVehicleData';
 import ViewVehicleClient from './_components/view-vehicle-client';
 import { Vehicle } from '@/lib/definitions';

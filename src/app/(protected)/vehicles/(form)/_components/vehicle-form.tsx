@@ -450,6 +450,7 @@ export default function VehicleForm({ initialData = null, vehicleId }: VehicleFo
                     placeholder="Ej., 2023"
                     {...field}
                     value={field.value ?? ''} // Ensure value is never undefined
+                    onChange={e => field.onChange(e.target.value === '' ? '' : Number(e.target.value))} // Handle empty string for clearing
                     disabled={isSubmitting}
                   />
                 </FormControl>

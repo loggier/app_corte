@@ -9,7 +9,7 @@ import AuthWrapper from '@/components/auth/auth-wrapper';
 import LogoutButton from '@/components/auth/logout-button';
 import type { User as UserType } from '@/lib/definitions';
 
-export default function VehiclesLayout({
+export default function ProtectedLayout({
   children,
 }: {
   children: React.ReactNode;

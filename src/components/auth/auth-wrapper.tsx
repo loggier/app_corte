@@ -35,7 +35,7 @@ export default function AuthWrapper({ children }: { children: React.ReactNode })
        // Clear potentially inconsistent state
        localStorage.removeItem('user');
        localStorage.removeItem('isAuthenticated');
-       router.push('/login'); // Redirect to login if not authenticated or user inactive
+       router.push('/'); // Redirect to root (which redirects to login) if not authenticated or user inactive
     }
   }, [router]);
 
