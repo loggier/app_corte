@@ -58,6 +58,7 @@ const formSchema = z.object({
     .int()
     .min(1900, { message: 'Year must be after 1900.' })
     .max(new Date().getFullYear() + 1, { message: 'Year cannot be in the future.' }),
+  tipo: z.enum(['Auto', 'Moto']).default('Auto'), // Add tipo field with default
   corte: z.string().min(1, { message: 'Corte is required.' }),
   colors: z
     .string()
@@ -144,6 +145,7 @@ export default function VehicleForm({ initialData = null, vehicleId }: VehicleFo
           brand: initialData.brand,
           model: initialData.model,
           year: initialData.year,
+          tipo: initialData.tipo || 'Auto', // Set default 'Auto' if missing
           corte: initialData.corte,
           colors: initialData.colors,
           ubicacion: initialData.ubicacion,
@@ -155,6 +157,7 @@ export default function VehicleForm({ initialData = null, vehicleId }: VehicleFo
           brand: '',
           model: '',
           year: undefined,
+          tipo: 'Auto', // Default for new vehicles
           corte: '',
           colors: '',
           ubicacion: '',
@@ -176,6 +179,14 @@ export default function VehicleForm({ initialData = null, vehicleId }: VehicleFo
       { value: 'Ignición', label: 'Ignición' },
       { value: 'Bomba de Gasolina', label: 'Bomba de Gasolina' },
       { value: 'Fusliera', label: 'Fusliera' },
+    ],
+    []
+  );
+
+    const tipoOptions = useMemo(
+    () => [
+      { value: 'Auto', label: 'Auto' },
+      { value: 'Moto', label: 'Moto' },
     ],
     []
   );
@@ -220,13 +231,14 @@ export default function VehicleForm({ initialData = null, vehicleId }: VehicleFo
         brand: brandName,
         modelId: modelObj?.id,
         imageUrls,
+        tipo: values.tipo || 'Auto', // Ensure tipo is included, default to 'Auto' if somehow undefined
       };
 
       if (vehicleId && initialData) {
         // Create the object only for fields that need to be updated in edit mode
         const refDoc = doc(db, 'vehicles', vehicleId);
         const updateData: any = {
-            ...rest, // Includes year, corte, colors, ubicacion, observation
+            ...rest, // Includes year, corte, colors, ubicacion, observation, tipo
             imageUrls: imageUrls, // Use new and existing image URLs
         };
         // Remove modelId and brand to prevent from updating
@@ -354,6 +366,36 @@ export default function VehicleForm({ initialData = null, vehicleId }: VehicleFo
                     {...field}
                     disabled={isSubmitting}
                   />
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+
+          {/* Tipo */}
+          <FormField
+            control={form.control}
+            name="tipo"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Tipo de Vehículo</FormLabel>
+                <FormControl>
+                  <Select
+                    onValueChange={field.onChange}
+                    value={field.value || 'Auto'} // Ensure value is always set, default visually
+                    disabled={isSubmitting}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Seleccione el tipo" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {tipoOptions.map((opt) => (
+                        <SelectItem key={opt.value} value={opt.value}>
+                          {opt.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 </FormControl>
                 <FormMessage />
               </FormItem>

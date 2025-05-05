@@ -6,7 +6,7 @@ import Link from 'next/link'
 import type { Vehicle, User } from '@/lib/definitions' // Import User type
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
-import { Pencil, Trash2, MapPin, Palette, Calendar, Wrench, Eye } from 'lucide-react'
+import { Pencil, Trash2, MapPin, Palette, Calendar, Wrench, Eye, Car, Bike } from 'lucide-react' // Added Car, Bike icons
 import { useState, useEffect } from 'react'; // Import useState and useEffect
 
 import { deleteDoc, doc } from 'firebase/firestore';
@@ -59,6 +59,9 @@ export default function VehicleCard({ vehicle }: VehicleCardProps) {
     const handleView = () => {
         router.push(`/vehicles/view/${vehicle.id}`);
     };
+
+    const vehicleType = vehicle.tipo || 'Auto'; // Default to 'Auto' if tipo is missing
+
   return (
     <Card className="flex flex-col overflow-hidden shadow-md hover:shadow-lg transition-shadow duration-200">
 
@@ -66,6 +69,10 @@ export default function VehicleCard({ vehicle }: VehicleCardProps) {
         <CardTitle className="text-lg font-semibold text-primary truncate">{vehicle.brand} - {vehicle.model}</CardTitle>
         <div className="text-sm text-muted-foreground space-y-1">
             <div className="flex items-center gap-1.5"> <Calendar className="w-3.5 h-3.5"/> Año: {vehicle.year}</div>
+            <div className="flex items-center gap-1.5">
+              {vehicleType === 'Moto' ? <Bike className="w-3.5 h-3.5" /> : <Car className="w-3.5 h-3.5" />}
+              Tipo: {vehicleType}
+            </div>
             <div className="flex items-center gap-1.5"> <Palette className="w-3.5 h-3.5"/> Color de Cable: {vehicle.colors}</div>
             <div className="flex items-center gap-1.5"> <Wrench className="w-3.5 h-3.5"/> Corte: {vehicle.corte}</div>
             <div className="flex items-center gap-1.5"> <MapPin className="w-3.5 h-3.5"/> Ubicación de corte: {vehicle.ubicacion}</div>

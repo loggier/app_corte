@@ -1,5 +1,6 @@
 
 
+
 export interface Brand {
   id: string; // El ID del documento generado por Firebase
   name: string;
@@ -20,6 +21,7 @@ export interface Vehicle {
   ubicacion: string; // ubicacion del corte de motor
   imageUrls: string[]; // array of url, max 5
   observation: string; // comentario
+  tipo?: 'Auto' | 'Moto'; // New optional field for vehicle type
 
 };
 
@@ -35,5 +37,6 @@ export interface User {
   createdAt?: any; // Firebase Timestamp or Date
   updatedAt?: any; // Firebase Timestamp or Date
 }
+
 
 

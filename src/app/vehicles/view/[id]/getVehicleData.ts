@@ -23,6 +23,7 @@ export async function getVehicleById(id: string): Promise<Vehicle | null> {
       colors: vehicleData.colors,
       ubicacion: vehicleData.ubicacion,
       observation: vehicleData.observation || '',
+      tipo: vehicleData.tipo || 'Auto', // Add tipo, default to 'Auto' if missing
     } as Vehicle;
 
   } catch (error) {

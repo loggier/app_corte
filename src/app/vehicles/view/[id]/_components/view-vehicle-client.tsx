@@ -4,7 +4,7 @@ import { useState } from 'react'; // Keep useState for selectedImage
 // Remove useEffect, useParams, useRouter as data is from props
 import type { Vehicle } from '@/lib/definitions';
 import { Button } from '@/components/ui/button';
-import { ArrowLeft } from 'lucide-react';
+import { ArrowLeft, Car, Bike } from 'lucide-react'; // Added Car, Bike icons
 import Link from 'next/link';
 import { Dialog, DialogContent, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import Image from 'next/image';
@@ -51,6 +51,8 @@ export default function ViewVehicleClient({ vehicle }: ViewVehicleClientProps) {
   //   return <div className="flex justify-center items-center min-h-screen">Vehículo no encontrado.</div>;
   // }
 
+  const vehicleType = vehicle.tipo || 'Auto'; // Default to 'Auto' if tipo is missing
+
   return (
     <div className="max-w-4xl mx-auto p-6">
       <Link href="/vehicles" passHref className="inline-flex items-center text-sm text-muted-foreground hover:text-foreground mb-6">
@@ -69,6 +71,10 @@ export default function ViewVehicleClient({ vehicle }: ViewVehicleClientProps) {
           <div>
             <h4 className="text-lg font-semibold mb-2">Detalles:</h4>
             {/* Use the vehicle prop */}
+            <div className="flex items-center gap-1.5 mb-1">
+              {vehicleType === 'Moto' ? <Bike className="w-4 h-4" /> : <Car className="w-4 h-4" />}
+              <strong>Tipo:</strong> {vehicleType}
+            </div>
             <p><strong>Corte:</strong> {vehicle.corte}</p>
             {/* Use the vehicle prop */}
             <p><strong>Colores:</strong> {vehicle.colors}</p>
