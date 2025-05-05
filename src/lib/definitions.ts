@@ -1,4 +1,5 @@
 
+
 export interface Brand {
   id: string; // El ID del documento generado por Firebase
   name: string;
@@ -28,10 +29,11 @@ export interface User {
   nombre: string;
   empresa?: string;
   password?: string; // Password hash - should not be sent to client
-  perfil: 'admin' | 'user'; // Example profiles
+  perfil: 'admin' | 'user' | 'tecnico'; // Example profiles including 'tecnico'
   status: 'activo' | 'inactivo';
   telefono?: string;
   createdAt?: any; // Firebase Timestamp or Date
   updatedAt?: any; // Firebase Timestamp or Date
 }
+
 

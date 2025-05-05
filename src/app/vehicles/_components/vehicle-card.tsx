@@ -1,11 +1,13 @@
+
 'use client';
 
 import Image from 'next/image'
 import Link from 'next/link'
-import type { Vehicle } from '@/lib/definitions'
+import type { Vehicle, User } from '@/lib/definitions' // Import User type
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Pencil, Trash2, MapPin, Palette, Calendar, Wrench, Eye } from 'lucide-react'
+import { useState, useEffect } from 'react'; // Import useState and useEffect
 
 import { deleteDoc, doc } from 'firebase/firestore';
 import { db } from '@/firebase/config';
@@ -18,7 +20,23 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 export default function VehicleCard({ vehicle }: VehicleCardProps) {
     const router = useRouter();
     const { toast } = useToast();
-    const handleDelete = async () => {        
+    const [userProfile, setUserProfile] = useState<string | null>(null); // State for user profile
+
+    useEffect(() => {
+        // Fetch user data from localStorage on the client side
+        const userDataString = localStorage.getItem('user');
+        if (userDataString) {
+          try {
+            const user: User = JSON.parse(userDataString);
+            setUserProfile(user.perfil); // Store the profile type
+          } catch (e) {
+            console.error("Error parsing user data from localStorage in VehicleCard", e);
+          }
+        }
+      }, []); // Empty dependency array ensures this runs once on mount
+
+
+    const handleDelete = async () => {
           try {
             await deleteDoc(doc(db, 'vehicles', vehicle.id));
             toast({
@@ -34,8 +52,8 @@ export default function VehicleCard({ vehicle }: VehicleCardProps) {
                     variant: 'destructive',
                 });
             }
-        
-        
+
+
     };
 
     const handleView = () => {
@@ -43,7 +61,7 @@ export default function VehicleCard({ vehicle }: VehicleCardProps) {
     };
   return (
     <Card className="flex flex-col overflow-hidden shadow-md hover:shadow-lg transition-shadow duration-200">
-    
+
       <CardContent className="flex-grow p-4 space-y-2">
         <CardTitle className="text-lg font-semibold text-primary truncate">{vehicle.brand} - {vehicle.model}</CardTitle>
         <div className="text-sm text-muted-foreground space-y-1">
@@ -69,7 +87,9 @@ export default function VehicleCard({ vehicle }: VehicleCardProps) {
                 <span className="sr-only">Edit</span>
             </Button>
          </Link>
-         <AlertDialog>
+         {/* Conditionally render the delete button based on user profile */}
+         {userProfile !== 'tecnico' && (
+          <AlertDialog>
             <AlertDialogTrigger asChild>
               <Button variant="destructive" size="sm">
                 <Trash2 className="h-4 w-4" />
@@ -87,6 +107,7 @@ export default function VehicleCard({ vehicle }: VehicleCardProps) {
               </AlertDialogFooter>
             </AlertDialogContent>
           </AlertDialog>
+         )}
 
       </CardFooter>
     </Card>
