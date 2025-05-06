@@ -69,7 +69,7 @@ const formSchema = z.object({
     .int()
     .min(1900, { message: 'Year must be after 1900.' })
     .max(new Date().getFullYear() + 1, { message: 'Year cannot be in the future.' }),
-  tipo: z.enum(['Auto', 'Moto']).default('Auto'),
+  tipo: z.enum(['Auto', 'Moto','Camion','Maquinaria Pesada','Otro']).default('Auto'),
   corte: z.string().min(1, { message: 'Corte is required.' }),
   colors: z
     .string()
@@ -274,6 +274,8 @@ export default function VehicleForm({ initialData = null, vehicleId }: VehicleFo
     () => [
       { value: 'Auto', label: 'Auto' },
       { value: 'Moto', label: 'Moto' },
+      { value: 'Camion', label: 'Camion' },
+      { value: 'Maquinaria Pesada', label: 'Maquinaria Pesada' },
     ],
     []
   );
