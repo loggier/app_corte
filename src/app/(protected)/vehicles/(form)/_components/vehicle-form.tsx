@@ -266,6 +266,7 @@ export default function VehicleForm({ initialData = null, vehicleId }: VehicleFo
       { value: 'Ignición', label: 'Ignición' },
       { value: 'Bomba de Gasolina', label: 'Bomba de Gasolina' },
       { value: 'Fusliera', label: 'Fusliera' },
+      { value: 'BCM', label: 'BCM' },
     ],
     []
   );
