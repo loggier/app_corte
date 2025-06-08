@@ -38,11 +38,11 @@ import {
   DialogFooter,
   DialogClose,
 } from '@/components/ui/dialog';
-import { Label } from '@/components/ui/label'; // Import Label
+import { Label } from '@/components/ui/label';
 
-import type { Vehicle, Brand, Model } from '@/lib/definitions';
+import type { Vehicle, Brand, Model, UserData } from '@/lib/definitions';
 import { useToast } from '@/hooks/use-toast';
-import { getAllBrands, getModelsByBrandId, addModelToBrand } from '@/firebase/data/brandsModels'; // Import addModelToBrand
+import { getAllBrands, getModelsByBrandId, addModelToBrand } from '@/firebase/data/brandsModels';
 import { db } from '@/firebase/config';
 
 // Global backend base URL (use env variable in production)
@@ -62,7 +62,7 @@ const formSchema = z.object({
   brand: z.string().min(1, { message: 'Brand is required.' }),
   model: z
     .string()
-    .min(1, { message: 'Model is required.' }) // Changed min to 1 as it can be newly added
+    .min(1, { message: 'Model is required.' })
     .max(50),
   year: z
     .coerce.number({ invalid_type_error: 'Year must be a number.' })
@@ -135,7 +135,6 @@ export default function VehicleForm({ initialData = null, vehicleId }: VehicleFo
   useEffect(() => {
     const previews = [...existingImageUrls];
     selectedFiles.forEach((file) => {
-        // Ensure we don't add duplicates if selection changes
         const objectUrl = URL.createObjectURL(file);
         if (!previews.includes(objectUrl)) {
             previews.push(objectUrl);
@@ -143,7 +142,6 @@ export default function VehicleForm({ initialData = null, vehicleId }: VehicleFo
     });
     setImagePreviews(previews);
 
-    // Cleanup function to revoke object URLs
     return () => {
         previews.forEach(preview => {
             if (preview.startsWith('blob:')) {
@@ -159,7 +157,6 @@ export default function VehicleForm({ initialData = null, vehicleId }: VehicleFo
     const allowedNewFiles = 5 - currentTotalImages;
     const filesToAdd = files.slice(0, allowedNewFiles);
 
-    // Prevent duplicates based on name and size
     const uniqueNewFiles = filesToAdd.filter(
       (newFile) =>
         !selectedFiles.some(
@@ -170,7 +167,6 @@ export default function VehicleForm({ initialData = null, vehicleId }: VehicleFo
 
     const combined = [...selectedFiles, ...uniqueNewFiles].slice(0, 5 - existingImageUrls.length);
     setSelectedFiles(combined);
-     // Also update the form state
      form.setValue('images', combined, { shouldValidate: true });
   };
 
@@ -193,7 +189,7 @@ export default function VehicleForm({ initialData = null, vehicleId }: VehicleFo
       : {
           brand: '',
           model: '',
-          year: undefined, // Set to undefined to avoid controlled/uncontrolled issue
+          year: undefined,
           tipo: 'Auto',
           corte: '',
           colors: '',
@@ -204,7 +200,6 @@ export default function VehicleForm({ initialData = null, vehicleId }: VehicleFo
         },
   });
 
-   // Effect to set the selected brand when editing and brands are loaded
    useEffect(() => {
     if (initialData && brands.length > 0) {
         const initialBrandId = brands.find(b => b.name === initialData.brand)?.id || initialData.brandId || '';
@@ -216,20 +211,13 @@ export default function VehicleForm({ initialData = null, vehicleId }: VehicleFo
     }, [initialData, brands, form]);
 
 
-   // Effect to set the selected model when editing and models are loaded
    useEffect(() => {
     if (initialData?.model && models.length > 0) {
-        // Check if the initial model name exists in the loaded models
         const modelExists = models.some(m => m.name === initialData.model);
         if (modelExists) {
-            // Only set the value if it's not already set or differs, to avoid infinite loops
              if (form.getValues('model') !== initialData.model) {
                  form.setValue('model', initialData.model, { shouldValidate: true, shouldDirty: false });
              }
-        } else if (!vehicleId) {
-             // If it's a new form and the initial model (if any provided) isn't in the list, reset it.
-             // This case might not be typical for 'edit' but good for consistency.
-             // form.setValue('model', '', { shouldValidate: true });
         }
     }
   }, [initialData, models, form, vehicleId]);
@@ -238,20 +226,13 @@ export default function VehicleForm({ initialData = null, vehicleId }: VehicleFo
   const removeExistingImage = (url: string) => {
     const updated = existingImageUrls.filter((u) => u !== url);
     setExistingImageUrls(updated);
-    // No need to manage imagePreviews separately for existing URLs
     form.setValue('existingImageUrls', updated);
   };
 
   const removeSelectedFile = (index: number) => {
     const updatedFiles = selectedFiles.filter((_, i) => i !== index);
-
-    // Update component state
     setSelectedFiles(updatedFiles);
-
-    // Update React Hook Form state
     form.setValue('images', updatedFiles, { shouldValidate: true });
-
-    // Update the file input visually (optional but good UX)
     const dataTransfer = new DataTransfer();
     updatedFiles.forEach(file => dataTransfer.items.add(file));
     const fileInput = document.querySelector('input[type="file"]') as HTMLInputElement | null;
@@ -277,6 +258,7 @@ export default function VehicleForm({ initialData = null, vehicleId }: VehicleFo
       { value: 'Moto', label: 'Moto' },
       { value: 'Camion', label: 'Camion' },
       { value: 'Maquinaria Pesada', label: 'Maquinaria Pesada' },
+      { value: 'Otro', label: 'Otro' },
     ],
     []
   );
@@ -284,12 +266,11 @@ export default function VehicleForm({ initialData = null, vehicleId }: VehicleFo
   const handleBrandChange = (brandId: string) => {
     setSelectedBrand(brandId);
     form.setValue('brand', brandId);
-    form.setValue('model', '', { shouldValidate: true }); // Reset model when brand changes
-    setModels([]); // Clear models immediately
-    getModelsByBrandId(brandId).then(setModels); // Fetch new models
+    form.setValue('model', '', { shouldValidate: true });
+    setModels([]);
+    getModelsByBrandId(brandId).then(setModels);
   };
 
-    // Function to handle adding a new model
     const handleAddNewModel = async () => {
         if (!newModelName.trim()) {
           toast({ title: 'Error', description: 'El nombre del modelo no puede estar vacío.', variant: 'destructive' });
@@ -300,7 +281,6 @@ export default function VehicleForm({ initialData = null, vehicleId }: VehicleFo
           return;
         }
 
-        // Check if model already exists (case-insensitive)
         const existingModel = models.find(m => m.name.toLowerCase() === newModelName.trim().toLowerCase());
         if (existingModel) {
             toast({ title: 'Información', description: `El modelo "${existingModel.name}" ya existe para esta marca. Seleccionándolo...` });
@@ -310,14 +290,11 @@ export default function VehicleForm({ initialData = null, vehicleId }: VehicleFo
             return;
         }
 
-
         setIsAddingModel(true);
         try {
           const addedModel = await addModelToBrand(selectedBrand, newModelName.trim());
-          // Refetch models to include the new one
           const updatedModels = await getModelsByBrandId(selectedBrand);
           setModels(updatedModels);
-          // Set the new model as selected in the form
           form.setValue('model', addedModel.name, { shouldValidate: true });
           toast({ title: 'Éxito', description: `Modelo "${addedModel.name}" agregado correctamente.` });
           setIsAddModelDialogOpen(false);
@@ -333,6 +310,28 @@ export default function VehicleForm({ initialData = null, vehicleId }: VehicleFo
 
   const onSubmit = async (values: VehicleFormValues) => {
     setIsSubmitting(true);
+    let userEmail: string | undefined = undefined;
+
+    if (typeof window !== 'undefined') {
+        const userDataString = localStorage.getItem('user');
+        if (userDataString) {
+            try {
+                const user: UserData = JSON.parse(userDataString);
+                userEmail = user.correo;
+            } catch (e) {
+                console.error("Error parsing user data from localStorage for submission", e);
+                toast({ title: 'Error', description: 'No se pudo obtener la información del usuario.', variant: 'destructive' });
+                setIsSubmitting(false);
+                return;
+            }
+        } else {
+            toast({ title: 'Error', description: 'Usuario no autenticado.', variant: 'destructive' });
+            setIsSubmitting(false);
+            return;
+        }
+    }
+
+
     try {
       const { images, existingImageUrls: existingUrls = [], ...rest } = values;
       let imageUrls = [...existingUrls];
@@ -361,25 +360,20 @@ export default function VehicleForm({ initialData = null, vehicleId }: VehicleFo
       const brandObj = brands.find((b) => b.id === values.brand);
       if (!brandObj) throw new Error("Selected brand not found");
 
-      // Find the model object using the potentially newly added model name
       let modelObj = models.find((m) => m.name === values.model);
 
-
-       // Prepare payload - modelId might be missing if it was just added but state hasn't updated yet
-       // In a robust implementation, addModelToBrand should return the ID, or we refetch models *before* this point.
-       // For now, we assume the model name is sufficient for the backend or we find it if available.
        const payload: Partial<Vehicle> & { brandId?: string; modelId?: string | undefined } = {
            ...rest,
-           brand: brandObj.name, // Store brand name
-           brandId: brandObj.id, // Store brand ID
-           model: values.model, // Use the model name from the form
-           modelId: modelObj?.id, // Store model ID if found, otherwise undefined
+           brand: brandObj.name,
+           brandId: brandObj.id,
+           model: values.model,
+           modelId: modelObj?.id,
            imageUrls,
            tipo: values.tipo || 'Auto',
-           year: values.year || 0, // Ensure year is a number, default to 0 if undefined
+           year: values.year || 0,
+           userEmail: userEmail, // Add userEmail to payload
        };
 
-        // If modelObj wasn't found initially (e.g., just added), try finding it again after potential state update
         if (!payload.modelId) {
             const potentiallyNewModel = models.find(m => m.name === values.model);
             if (potentiallyNewModel) {
@@ -387,41 +381,33 @@ export default function VehicleForm({ initialData = null, vehicleId }: VehicleFo
             }
         }
 
-
-      // Remove potentially undefined observation if empty
       if (!payload.observation) {
         delete payload.observation;
       }
 
 
       if (vehicleId && initialData) {
-        // Update existing document
         const refDoc = doc(db, 'vehicles', vehicleId);
-        // Only include fields that were actually submitted in the form
-        // Brand and Model cannot be changed in edit mode per current UI logic
         const updateData: any = {
             year: payload.year,
             corte: payload.corte,
             colors: payload.colors,
             ubicacion: payload.ubicacion,
             tipo: payload.tipo,
-            imageUrls: payload.imageUrls, // Updated image URLs
-            ...(payload.observation && { observation: payload.observation }), // Conditionally add observation
+            imageUrls: payload.imageUrls,
+            userEmail: payload.userEmail, // Ensure userEmail is updated
+            ...(payload.observation && { observation: payload.observation }),
         };
         await updateDoc(refDoc, updateData);
         toast({ title: 'Success', description: 'Vehículo actualizado correctamente.' });
-        router.push('/vehicles'); // Redirect after update
+        router.push('/vehicles');
 
       } else {
-        // Add new document
-        // Ensure required fields for new doc are present
-         if (!payload.brandId || !payload.model) { // Model ID might be tricky if just added
+         if (!payload.brandId || !payload.model) {
              throw new Error("Missing brand or model information for new vehicle.");
          }
-         // If modelId is missing after checks, log a warning or handle as needed
          if (!payload.modelId) {
              console.warn("Model ID is missing. Saving vehicle without explicit model reference ID.");
-             // Consider fetching the model ID again here if critical
          }
         await addDoc(collection(db, 'vehicles'), payload);
         toast({ title: 'Success', description: 'Vehículo agregado correctamente.' });
@@ -450,8 +436,8 @@ export default function VehicleForm({ initialData = null, vehicleId }: VehicleFo
               <FormControl className="flex-grow">
                 <Select
                   onValueChange={field.onChange}
-                  value={field.value} // Ensure this value is controlled
-                  disabled={isSubmitting || vehicleId !== undefined} // Disable if editing
+                  value={field.value ?? ''}
+                  disabled={isSubmitting || vehicleId !== undefined}
                 >
                   <SelectTrigger>
                     <SelectValue placeholder="Seleccione un modelo" />
@@ -471,7 +457,7 @@ export default function VehicleForm({ initialData = null, vehicleId }: VehicleFo
                   </SelectContent>
                 </Select>
               </FormControl>
-              {!vehicleId && ( // Only show Add button for new vehicles
+              {!vehicleId && (
                   <Button
                     type="button"
                     variant="outline"
@@ -506,7 +492,6 @@ export default function VehicleForm({ initialData = null, vehicleId }: VehicleFo
           onSubmit={form.handleSubmit(onSubmit)}
           className="space-y-6 bg-card p-6 rounded-lg shadow-md border"
         >
-          {/* Marca */}
           <FormField
             control={form.control}
             name="brand"
@@ -514,13 +499,12 @@ export default function VehicleForm({ initialData = null, vehicleId }: VehicleFo
               <FormItem>
                 <FormLabel>Marca</FormLabel>
                 {vehicleId && initialData ? (
-                  // Display initial brand name but it's not part of the form submission for edit
                   <Input value={initialData.brand} disabled />
                 ) : (
                   <FormControl>
                     <Select
-                      onValueChange={(value) => handleBrandChange(value)} // Use handler to manage dependent state
-                      value={field.value} // Ensure this value is controlled
+                      onValueChange={(value) => handleBrandChange(value)}
+                      value={field.value ?? ''}
                       disabled={isSubmitting}
                     >
                       <SelectTrigger>
@@ -547,7 +531,6 @@ export default function VehicleForm({ initialData = null, vehicleId }: VehicleFo
 
           {modelField}
 
-          {/* Año */}
           <FormField
             control={form.control}
             name="year"
@@ -559,8 +542,8 @@ export default function VehicleForm({ initialData = null, vehicleId }: VehicleFo
                     type="number"
                     placeholder="Ej., 2023"
                     {...field}
-                    value={field.value ?? ''} // Ensure value is never undefined or null for input
-                    onChange={e => field.onChange(e.target.value === '' ? undefined : Number(e.target.value))} // Set to undefined on empty
+                    value={field.value ?? ''}
+                    onChange={e => field.onChange(e.target.value === '' ? undefined : Number(e.target.value))}
                     disabled={isSubmitting}
                   />
                 </FormControl>
@@ -569,7 +552,6 @@ export default function VehicleForm({ initialData = null, vehicleId }: VehicleFo
             )}
           />
 
-          {/* Tipo */}
           <FormField
             control={form.control}
             name="tipo"
@@ -579,7 +561,7 @@ export default function VehicleForm({ initialData = null, vehicleId }: VehicleFo
                 <FormControl>
                   <Select
                     onValueChange={field.onChange}
-                    value={field.value || 'Auto'} // Ensure value is always set, default visually
+                    value={field.value ?? 'Auto'}
                     disabled={isSubmitting}
                   >
                     <SelectTrigger>
@@ -599,7 +581,6 @@ export default function VehicleForm({ initialData = null, vehicleId }: VehicleFo
             )}
           />
 
-          {/* Corte */}
           <FormField
             control={form.control}
             name="corte"
@@ -609,7 +590,7 @@ export default function VehicleForm({ initialData = null, vehicleId }: VehicleFo
                 <FormControl>
                   <Select
                     onValueChange={field.onChange}
-                    value={field.value}
+                    value={field.value ?? ''}
                     disabled={isSubmitting}
                   >
                     <SelectTrigger>
@@ -650,7 +631,7 @@ export default function VehicleForm({ initialData = null, vehicleId }: VehicleFo
             </FormItem>
           )} />
 
-          <FormField control={form.control} name="images" render={({ field: { onChange, value, ...restField } }) => ( // Destructure onChange and value
+          <FormField control={form.control} name="images" render={({ field: { onChange, value, ...restField } }) => (
              <FormItem>
                <FormLabel>Imágenes</FormLabel>
                <FormControl>
@@ -660,20 +641,18 @@ export default function VehicleForm({ initialData = null, vehicleId }: VehicleFo
                    accept="image/*"
                    onChange={(e) => {
                        const files = e.target.files ? Array.from(e.target.files) : [];
-                       handleFileChange(files); // Use the updated handler
-                       // No need to call field.onChange here, handleFileChange updates RHF
+                       handleFileChange(files);
                    }}
                    disabled={isSubmitting || (existingImageUrls.length + selectedFiles.length >= 5)}
-                   {...restField} // Pass down other field properties like ref, name, onBlur
+                   {...restField}
                  />
                </FormControl>
                <FormDescription>
                  Puedes subir hasta {5 - existingImageUrls.length} imágenes nuevas. Máximo 5 en total.
                </FormDescription>
                <FormMessage />
-               {(existingImageUrls.length > 0 || selectedFiles.length > 0) && ( // Check both existing and selected
+               {(existingImageUrls.length > 0 || selectedFiles.length > 0) && (
                 <div className="grid grid-cols-2 md:grid-cols-3 gap-4 mt-4">
-                    {/* Display existing images */}
                     {existingImageUrls.map((url, idx) => (
                         <div key={`existing-${url}-${idx}`} className="relative group">
                         <img src={url} alt={`existing-preview-${idx}`} className="w-full h-24 object-cover rounded-md" />
@@ -690,20 +669,18 @@ export default function VehicleForm({ initialData = null, vehicleId }: VehicleFo
                          <div className="absolute bottom-1 left-1 bg-black bg-opacity-60 text-white text-xs px-1 rounded">Existente</div>
                         </div>
                     ))}
-                    {/* Display newly selected file previews */}
                     {selectedFiles.map((file, idx) => {
-                        const previewUrl = imagePreviews.find(p => p.startsWith('blob:') && selectedFiles[idx] && p.endsWith(file.name)); // Basic match, might need improvement
-                        const objectUrl = URL.createObjectURL(file); // Create URL for display
+                        const objectUrl = URL.createObjectURL(file);
 
                          return (
                             <div key={`new-${file.name}-${idx}`} className="relative group">
-                            <img src={objectUrl} alt={`new-preview-${idx}`} className="w-full h-24 object-cover rounded-md" onLoad={() => URL.revokeObjectURL(objectUrl)} /> {/* Revoke after load */}
+                            <img src={objectUrl} alt={`new-preview-${idx}`} className="w-full h-24 object-cover rounded-md" onLoad={() => URL.revokeObjectURL(objectUrl)} />
                             <Button
                                 size="icon"
                                 variant="destructive"
                                 className="absolute top-1 right-1 h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity"
                                 onClick={() => removeSelectedFile(idx)}
-                                type="button" // Prevent form submission
+                                type="button"
                             >
                                 <X className="w-4 h-4" />
                                 <span className="sr-only">Remove new image</span>
@@ -735,7 +712,6 @@ export default function VehicleForm({ initialData = null, vehicleId }: VehicleFo
         </form>
       </Form>
 
-        {/* Add New Model Dialog */}
         <Dialog open={isAddModelDialogOpen} onOpenChange={setIsAddModelDialogOpen}>
             <DialogContent>
             <DialogHeader>
@@ -772,8 +748,6 @@ export default function VehicleForm({ initialData = null, vehicleId }: VehicleFo
             </DialogFooter>
             </DialogContent>
         </Dialog>
-
     </div>
   );
 }
-

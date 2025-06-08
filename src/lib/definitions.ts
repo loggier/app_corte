@@ -1,6 +1,4 @@
 
-
-
 export interface Brand {
   id: string; // El ID del documento generado por Firebase
   name: string;
@@ -24,8 +22,8 @@ export interface Vehicle {
   ubicacion: string; // ubicacion del corte de motor
   imageUrls: string[]; // array of url, max 5
   observation?: string; // comentario - made optional
-  tipo?: 'Auto' | 'Moto'; // New optional field for vehicle type
-
+  tipo?: 'Auto' | 'Moto' | 'Camion' | 'Maquinaria Pesada' | 'Otro'; // New optional field for vehicle type
+  userEmail?: string; // Email of the user who created/last updated the record
 };
 
 export interface User {
@@ -51,7 +49,3 @@ export interface UserData {
     telefono?: string;
     // Add other fields from your User interface that might be stored
 }
-
-
-
-

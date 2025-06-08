@@ -34,13 +34,12 @@ async function getVehicleById(id: string): Promise<Vehicle | null> {
       colors: vehicleData.colors,
       ubicacion: vehicleData.ubicacion,
       observation: vehicleData.observation || '',
-      tipo: vehicleData.tipo || 'Auto', // Add tipo, default to 'Auto' if missing
+      tipo: vehicleData.tipo || 'Auto',
+      userEmail: vehicleData.userEmail || '', // Add userEmail
     } as Vehicle;
 
   } catch (error) {
     console.error(`Error fetching vehicle with ID ${id}:`, error);
-    // Depending on your error handling strategy, you might want to throw an error
-    // or return null and handle it in the page component.
     return null;
   }
 }
@@ -60,13 +59,10 @@ export default async function EditVehiclePage({ params }: EditPageProps) {
     notFound();
     }
 
-  // Assume VehicleForm is a Client Component and accepts initialData
   return (
     <div className="container mx-auto py-8">
       <h1 className="text-2xl font-bold mb-6">Editar Vehículo</h1>
-         {/* Pass initialData to the form component */}
       <VehicleForm initialData={vehicle} vehicleId={vehicleId}/>
     </div>
   );
 }
-
